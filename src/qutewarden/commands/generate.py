@@ -13,20 +13,24 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import secrets
 import shlex
 import sys
+from html.parser import HTMLParser
+from urllib.parse import urlsplit
 
 from qutewarden import flow, match
 from qutewarden.commands import register
 from qutewarden.config import SETTINGS, Setting
 from qutewarden.context import Context
-from qutewarden.errors import UserCancelled
+from qutewarden.errors import QutewardenError, UserCancelled
 from qutewarden.filljs import render_fill_js, render_probe_js
 from qutewarden.fillroute import send_js
 from qutewarden.model import LoginItem
 
 NEW_ITEM_LINE = "new Item"
+_NONCE_RE = re.compile(r"[0-9a-f]{16}")
 
 
 def _add_arguments(parser: argparse.ArgumentParser) -> None:
@@ -40,6 +44,11 @@ def _add_arguments(parser: argparse.ArgumentParser) -> None:
 def run(ctx: Context, args: argparse.Namespace) -> int:
     page_url = ctx.qute.url or ""
     origin = match.origin_of(page_url)
+    nonce = args.username_probe
+    if nonce is not None:
+        if not _NONCE_RE.fullmatch(nonce):
+            raise QutewardenError("generate: malformed --username-probe")
+        return _create_item(ctx, page_url, origin, nonce)
     flow.ensure_unlocked(ctx)
     item = _choose_item(ctx, flow.find_candidates(ctx, page_url))
     if item is None:
@@ -49,6 +58,50 @@ def run(ctx: Context, args: argparse.Namespace) -> int:
     ctx.backend.update_password(item.id, password)
     _fill(ctx, origin, item, password)
     return 0
+
+
+def _create_item(ctx: Context, page_url: str, origin: str, nonce: str) -> int:
+    """Stage 2: username from the DOM dump (or the picker), then generate, save, fill."""
+    username = _probed_username(ctx.environ.get("QUTE_HTML"), nonce)
+    if not username:
+        username = ctx.picker.ask_text("Username")
+        if username is None:
+            raise UserCancelled()
+    flow.ensure_unlocked(ctx)
+    item = LoginItem(id="", name=urlsplit(origin).hostname or origin, username=username or None)
+    password = ctx.generate_password(ctx.config)
+    ctx.backend.create_login(name=item.name, username=item.username, uri=origin,
+                             password=password)
+    _fill(ctx, origin, item, password, probe_nonce=nonce)
+    return 0
+
+
+class _ProbeReader(HTMLParser):
+    """Finds the probe attribute on the ``<html>`` element of a DOM dump."""
+
+    def __init__(self, attribute: str) -> None:
+        super().__init__()
+        self.attribute = attribute
+        self.value: str | None = None
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag == "html" and self.value is None:
+            self.value = dict(attrs).get(self.attribute)
+
+
+def _probed_username(dump_path: str | None, nonce: str) -> str | None:
+    if not dump_path:
+        return None
+    try:
+        with open(dump_path, encoding="utf-8", errors="replace") as f:
+            html = f.read()
+    except OSError:
+        return None
+    reader = _ProbeReader(f"data-qutewarden-probe-{nonce}")
+    reader.feed(html)
+    reader.close()
+    value = (reader.value or "").strip()
+    return value or None
 
 
 def _choose_item(ctx: Context, found: list[LoginItem]) -> LoginItem | None:
@@ -96,10 +149,11 @@ def _flag(setting: Setting, value: object) -> list[str]:
     return [setting.flag, str(value)]
 
 
-def _fill(ctx: Context, origin: str, item: LoginItem, password: str) -> None:
+def _fill(ctx: Context, origin: str, item: LoginItem, password: str, *,
+          probe_nonce: str | None = None) -> None:
     js = render_fill_js(expected_origin=origin, mode="new_password",
                         username=item.username, password=password,
-                        submit=ctx.config.submit_after_fill)
+                        submit=ctx.config.submit_after_fill, probe_nonce=probe_nonce)
     ctx.qute.message_info(f"saved new password, filling {_describe(item)}")
     send_js(ctx.qute, js, runtime_dir=ctx.runtime_dir, timeout=ctx.fill_timeout)
     if ctx.config.insert_mode_after_fill:

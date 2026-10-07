@@ -188,3 +188,124 @@ def test_choosing_new_item_among_several_candidates_probes_the_page(
     assert generate(backend=backend, picker=FakePicker(choices=[2])) == 0
     assert backend.created == [] and backend.updated == []
     assert spawned(fake_qutebrowser.commands)[-2] == "--username-probe"
+
+
+def _dump(tmp_path, html: str) -> dict[str, str]:
+    path = tmp_path / "dump.html"
+    path.write_text(html)
+    return {"QUTE_HTML": str(path)}
+
+
+def test_second_run_creates_the_item_with_the_username_from_the_page(
+        generate, fake_qutebrowser, tmp_path):
+    backend = FakeBackend()
+    picker = FakePicker()
+    html = (f'<!DOCTYPE html><html data-qutewarden-probe-{NONCE}="frank@mail.test">'
+            '<body><input type="email"></body></html>')
+    assert generate("--username-probe", NONCE, url=NEW_SITE, backend=backend, picker=picker,
+                    environ=_dump(tmp_path, html)) == 0
+    assert backend.created == [{"name": "new-site.test", "username": "frank@mail.test",
+                                "uri": "https://new-site.test", "password": GENERATED}]
+    assert picker.prompts == []
+    [js] = fake_qutebrowser.js
+    assert '"mode": "new_password"' in js
+    assert f'"password": "{GENERATED}"' in js
+    assert f'"probeNonce": "{NONCE}"' in js
+    assert '"username": "frank@mail.test"' in js
+    assert fake_qutebrowser.messages == [
+        ("info", "qutewarden: saved new password, filling new-site.test (frank@mail.test)")]
+    assert not any(c.startswith("spawn") for c in fake_qutebrowser.commands)
+
+
+def test_the_second_run_creates_even_when_candidates_exist(generate, tmp_path):
+    # Stage 1 already offered the Candidates; the user chose "new Item".
+    backend = FakeBackend()
+    picker = FakePicker()
+    assert generate("--username-probe", NONCE, backend=backend, picker=picker,
+                    environ=_dump(tmp_path, "<html></html>")) == 0
+    assert picker.prompts == ["Username"]
+    assert backend.updated == []
+    assert backend.created[0]["name"] == "github.com"
+    assert backend.created[0]["uri"] == "https://github.com"
+
+
+def test_the_new_item_has_no_match_mode(generate, tmp_path):
+    backend = FakeBackend()
+    generate("--username-probe", NONCE, url=NEW_SITE, backend=backend,
+             environ=_dump(tmp_path, "<html></html>"))
+    [created] = [i for i in backend.items if i.name == "new-site.test"]
+    assert [u.mode for u in created.uris] == [None]
+
+
+@pytest.mark.parametrize("html", [
+    "<html><body></body></html>",
+    f'<html data-qutewarden-probe-{NONCE}=""></html>',
+    '<html data-qutewarden-probe-ffffffffffffffff="mallory"></html>',
+])
+def test_without_a_username_on_the_page_the_picker_asks_for_one(generate, tmp_path, html):
+    backend = FakeBackend()
+    picker = FakePicker(text="grace")
+    assert generate("--username-probe", NONCE, url=NEW_SITE, backend=backend, picker=picker,
+                    environ=_dump(tmp_path, html)) == 0
+    assert picker.prompts == ["Username"]
+    assert backend.created[0]["username"] == "grace"
+
+
+def test_a_missing_dump_also_asks_for_the_username(generate):
+    backend = FakeBackend()
+    picker = FakePicker(text="grace")
+    assert generate("--username-probe", NONCE, url=NEW_SITE, backend=backend, picker=picker,
+                    environ={"QUTE_HTML": "/nonexistent/qute_html"}) == 0
+    assert backend.created[0]["username"] == "grace"
+
+
+def test_an_empty_answer_creates_the_item_without_a_username(generate, tmp_path):
+    backend = FakeBackend()
+    assert generate("--username-probe", NONCE, url=NEW_SITE, backend=backend,
+                    picker=FakePicker(text=""), environ=_dump(tmp_path, "<html></html>")) == 0
+    assert backend.created[0]["username"] is None
+
+
+def test_cancelling_the_username_prompt_saves_and_fills_nothing(
+        generate, fake_qutebrowser, tmp_path):
+    backend = FakeBackend()
+    assert generate("--username-probe", NONCE, url=NEW_SITE, backend=backend,
+                    picker=FakePicker(text=None),
+                    environ=_dump(tmp_path, "<html></html>")) == 0
+    assert backend.created == []
+    assert fake_qutebrowser.commands == []
+
+
+def test_a_failed_create_fills_nothing(generate, fake_qutebrowser, tmp_path):
+    backend = FakeBackend(fail_save=True)
+    assert generate("--username-probe", NONCE, url=NEW_SITE, backend=backend,
+                    environ=_dump(tmp_path, "<html></html>")) == 1
+    assert fake_qutebrowser.js == []
+    [(level, _)] = fake_qutebrowser.messages
+    assert level == "error"
+
+
+def test_the_second_run_unlocks_a_locked_vault_before_saving(generate, tmp_path):
+    backend = FakeBackend(unlocked=False)
+    assert generate("--username-probe", NONCE, url=NEW_SITE, backend=backend,
+                    environ=_dump(tmp_path, "<html></html>")) == 0
+    assert backend.calls.index("unlock") < backend.calls.index("create_login")
+
+
+def test_a_malformed_probe_nonce_is_refused(generate):
+    backend = FakeBackend()
+    assert generate("--username-probe", "x;y", url=NEW_SITE, backend=backend) == 1
+    assert backend.created == []
+
+
+def test_the_second_stage_keeps_the_password_in_the_pipe(
+        generate, fake_qutebrowser, tmp_path, child_recorder, capfd):
+    # The first stage never generates (see the probe test); the no-leak test
+    # doesn't reach this second stage, so check it here.
+    html = f'<html data-qutewarden-probe-{NONCE}="frank"></html>'
+    generate("--username-probe", NONCE, url=NEW_SITE, environ=_dump(tmp_path, html))
+    out, err = capfd.readouterr()
+    assert not any("QWSECRET" in c for c in fake_qutebrowser.commands)
+    assert child_recorder.children == []
+    assert "QWSECRET" not in out + err
+    assert any(GENERATED in js for js in fake_qutebrowser.js)
