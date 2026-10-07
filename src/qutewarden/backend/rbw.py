@@ -217,7 +217,7 @@ class RbwBackend(Backend):
             with open(path, encoding="utf-8") as f:
                 entries = json.load(f).get("entries") or []
         except (OSError, ValueError, AttributeError):
-            raise BackendError("can't read rbw's local database", hint=_SYNC_HINT) from None
+            raise BackendError("can't read rbw's local db file", hint=_SYNC_HINT) from None
         db = {}
         for entry in entries:
             data = entry.get("data")
