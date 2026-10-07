@@ -81,10 +81,37 @@ function setValue(el, value) {
   el.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
-function fillLogin(root, a) {
-  const passwordField = findLoginPasswordField(root);
-  const usernameField = findUsernameField(passwordField ? (passwordField.form || root) : root,
-    passwordField);
+// The focused input, if it is one we could fill (a focused search box or
+// checkbox counts as no focus).
+function focusedInput() {
+  const el = document.activeElement;
+  if (!(el instanceof HTMLInputElement) || !isUsable(el)) return null;
+  return inputType(el) === "password" || isTextish(el) || looksLikeOtp(el) ? el : null;
+}
+
+// Where to look for fields: the focused input's <form>, or (no form) its
+// nearest ancestor that holds another fillable field; else the document.
+function scopeFor(focused) {
+  if (!focused) return document;
+  if (focused.form) return focused.form;
+  const isField = (el) => el !== focused && (inputType(el) === "password" || isTextish(el));
+  for (let el = focused.parentElement; el; el = el.parentElement) {
+    if (usableInputs(el).some(isField)) return el;
+  }
+  return document;
+}
+
+function fillLogin(root, a, focused) {
+  let passwordField = null;
+  let usernameField = null;
+  if (focused && inputType(focused) === "password") {
+    passwordField = focused;
+  } else if (focused && isTextish(focused) && !looksLikeOtp(focused)) {
+    usernameField = focused;
+  }
+  passwordField = passwordField || findLoginPasswordField(root);
+  usernameField = usernameField || findUsernameField(
+    passwordField ? (passwordField.form || root) : root, passwordField);
   const filled = [];
   if (usernameField && a.username != null) {
     setValue(usernameField, a.username);
@@ -147,19 +174,20 @@ function fillNewPassword(root, a) {
 // Page-kind decision for `auto` (Python can't get a reply from the page):
 // a password field means a login page; else an OTP field means an OTP page;
 // else fill whatever login fields there are (two-step page 1).
-function fillAuto(root, a) {
-  if (passwordFields(root).length) return fillLogin(root, a);
-  if (findOtpField(root)) return fillOtp(root, a, null);
-  return fillLogin(root, a);
+function fillAuto(root, a, focused) {
+  if (passwordFields(root).length) return fillLogin(root, a, focused);
+  if (findOtpField(root)) return fillOtp(root, a, focused);
+  return fillLogin(root, a, focused);
 }
 
 function qutewardenFill(a) {
   if (location.origin !== a.origin) return;
-  const root = document;
+  const focused = focusedInput();
+  const root = scopeFor(focused);
   switch (a.mode) {
-    case "auto": fillAuto(root, a); break;
-    case "login": fillLogin(root, a); break;
-    case "otp": fillOtp(root, a, null); break;
+    case "auto": fillAuto(root, a, focused); break;
+    case "login": fillLogin(root, a, focused); break;
+    case "otp": fillOtp(root, a, focused); break;
     case "new_password": fillNewPassword(root, a); break;
   }
 }

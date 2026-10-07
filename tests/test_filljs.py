@@ -69,6 +69,17 @@ def test_single_step_login_fills_username_and_password(page):
     }
 
 
+def test_focused_search_box_does_not_count_as_focus(page):
+    load(page, "login_single.html")
+    page.focus("#q")
+    run_isolated(page, render_fill_js(
+        expected_origin=ORIGIN, mode="auto", username="alice", password="QWSECRET-pw",
+    ))
+    assert values(page, "username", "password", "q") == {
+        "username": "alice", "password": "QWSECRET-pw", "q": "",
+    }
+
+
 def test_fires_bubbling_input_and_change_events(page):
     load(page, "login_single.html")
     page.evaluate("""() => {
@@ -202,6 +213,30 @@ def test_react_controlled_inputs_see_the_values(page):
         expected_origin=ORIGIN, mode="auto", username="alice", password="QWSECRET-pw",
     ))
     assert page.evaluate("window.state") == {"username": "alice", "password": "QWSECRET-pw"}
+
+
+ALL_TWO_FORMS = ("user-a", "pass-a", "user-b", "pass-b", "user-c", "pass-c", "user-d", "pass-d")
+
+
+@pytest.mark.parametrize(("focus", "filled"), [
+    (None, ("user-a", "pass-a")),             # no focus: first login form
+    ("pass-b", ("user-b", "pass-b")),         # focused input's <form>
+    ("user-b", ("user-b", "pass-b")),
+    ("user-d", ("user-d", "pass-d")),         # no form: nearest common ancestor
+    ("pass-c", ("user-c", "pass-c")),
+])
+def test_focused_input_decides_which_fields_get_filled(page, focus, filled):
+    load(page, "login_two_forms.html")
+    if focus:
+        page.focus(f"#{focus}")
+    run_isolated(page, render_fill_js(
+        expected_origin=ORIGIN, mode="auto", username="alice", password="QWSECRET-pw",
+    ))
+    expected = {
+        i: ("" if i not in filled else "alice" if i.startswith("user") else "QWSECRET-pw")
+        for i in ALL_TWO_FORMS
+    }
+    assert values(page, *ALL_TWO_FORMS) == expected
 
 
 @pytest.mark.parametrize("served_at", [
