@@ -163,14 +163,15 @@ def test_login_page_in_auto_mode_does_not_get_the_totp_code(page):
     }
 
 
-def test_signup_fills_new_password_and_confirmation(page):
+def test_signup_fills_only_new_password_and_confirmation(page):
+    # Spec `generate` step 3: only new-password fields, never an empty username.
     load(page, "signup.html")
     run_isolated(page, render_fill_js(
         expected_origin=ORIGIN, mode="new_password", username="alice",
         password="QWSECRET-generated",
     ))
     assert values(page, "username", "email", "password", "confirm", "hidden-password") == {
-        "username": "alice", "email": "", "password": "QWSECRET-generated",
+        "username": "", "email": "", "password": "QWSECRET-generated",
         "confirm": "QWSECRET-generated", "hidden-password": "",
     }
 
@@ -259,7 +260,28 @@ def test_submit_without_form_clicks_the_submit_button(page):
     assert page.evaluate("window.clicked") == 1
 
 
-PROBE_ATTR = "data-qutewarden-probe-0123abcd"
+def test_submit_without_form_never_clicks_a_show_password_toggle(page):
+    load(page, "login_toggle.html")
+    run_isolated(page, render_fill_js(
+        expected_origin=ORIGIN, mode="auto", username="alice", password="QWSECRET-pw",
+        submit=True,
+    ))
+    assert page.evaluate("window.clicks") == ["submit"]
+
+
+def test_submit_without_form_or_safe_button_clicks_nothing(page):
+    load(page, "login_toggle.html")
+    page.evaluate("document.getElementById('submit').remove()")
+    run_isolated(page, render_fill_js(
+        expected_origin=ORIGIN, mode="auto", username="alice", password="QWSECRET-pw",
+        submit=True,
+    ))
+    assert page.evaluate("window.clicks") == []
+    assert values(page, "username", "password") == {
+        "username": "alice", "password": "QWSECRET-pw"}
+
+
+PROBE_ATTR ="data-qutewarden-probe-0123abcd"
 
 
 def probe_attr(page):

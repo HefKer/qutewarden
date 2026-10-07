@@ -1,0 +1,24 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Sign in (show-password toggle, no form)</title></head>
+<body>
+  <!-- No <form>. The password field's wrapper holds show-password toggles,
+       type=button / role=button controls like the real sign-in button. Only
+       the sign-in button may be clicked. -->
+  <div id="app">
+    <div class="field"><input type="text" id="username" placeholder="Username"></div>
+    <div class="field">
+      <input type="password" id="password" placeholder="Password">
+      <button type="button" id="toggle"><svg width="16" height="16"></svg></button>
+      <span role="button" id="eye" aria-label="Show password">o</span>
+    </div>
+    <div class="actions"><button type="button" id="submit">Sign in</button></div>
+  </div>
+  <script>
+    window.clicks = [];
+    for (const id of ["toggle", "eye", "submit"]) {
+      document.getElementById(id).addEventListener("click", () => window.clicks.push(id));
+    }
+  </script>
+</body>
+</html>

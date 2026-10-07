@@ -75,6 +75,12 @@ def _candidates(ctx: Context, page_url: str) -> list[LoginItem]:
                             extractor=_extractor(ctx))
 
 
+def is_candidate(ctx: Context, item: LoginItem, page_url: str) -> bool:
+    """Whether ``item`` is a Candidate for the page (Security rule 5)."""
+    return match.is_candidate(item, page_url, default_mode=ctx.config.matching_default_mode,
+                              extractor=_extractor(ctx))
+
+
 def item_line(item: LoginItem) -> str:
     """One picker line: the Item name and username."""
     return f"{item.name} — {item.username}" if item.username else item.name
@@ -87,7 +93,16 @@ def fill_login(ctx: Context, selection: Selection) -> None:
     js = render_fill_js(expected_origin=selection.origin, mode="auto",
                         username=item.username, password=secrets.password,
                         totp=secrets.totp, submit=ctx.config.submit_after_fill)
-    ctx.qute.message_info(f"filling {describe(item)}")
+    send_fill(ctx, js, f"filling {describe(item)}")
+
+
+def send_fill(ctx: Context, js: str, message: str) -> None:
+    """Announce a Fill, send its script through the fill route, then insert mode.
+
+    qutewarden gets no reply from the page, so ``message`` is shown first and
+    must be neutral. Insert mode follows ``insert_mode_after_fill``.
+    """
+    ctx.qute.message_info(message)
     send_js(ctx.qute, js, runtime_dir=ctx.runtime_dir, timeout=ctx.fill_timeout)
     if ctx.config.insert_mode_after_fill:
         ctx.qute.enter_insert_mode()

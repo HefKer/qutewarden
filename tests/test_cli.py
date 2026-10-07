@@ -14,7 +14,6 @@ from qutewarden.model import MatchMode
 from qutewarden.qute import Qute
 
 SUBCOMMANDS = ["fill", "totp", "generate", "vault", "unlock", "lock", "sync", "status"]
-STUBS: list[str] = []  # every subcommand is implemented; the stub test skips on an empty set
 
 
 @pytest.fixture
@@ -75,15 +74,6 @@ def test_help_lists_every_subcommand(capsys):
 
 def test_registry_has_every_subcommand():
     assert sorted(all_commands()) == sorted(SUBCOMMANDS)
-
-
-@pytest.mark.parametrize("name", STUBS)
-def test_stub_subcommands_say_not_implemented(name, environ, fifo):
-    assert cli.main([name], environ=environ, make_context=Recorder()) == 0
-    [[command, text]] = messages(fifo)
-    assert command == "message-info"
-    assert text.startswith("qutewarden: ")
-    assert "not implemented yet" in text
 
 
 def test_missing_subcommand_is_a_usage_error(environ, capsys):

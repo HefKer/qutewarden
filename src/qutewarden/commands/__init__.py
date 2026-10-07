@@ -51,9 +51,3 @@ def all_commands() -> dict[str, Command]:
     for module in pkgutil.iter_modules(__path__):
         importlib.import_module(f"{__name__}.{module.name}")
     return dict(_REGISTRY)
-
-
-def not_implemented(ctx: Context, name: str) -> int:
-    """Placeholder body for subcommands a later ticket implements."""
-    ctx.qute.message_info(f"{name}: not implemented yet")
-    return 0

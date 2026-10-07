@@ -42,8 +42,6 @@ VARIANTS: dict[str, tuple[list[str], dict]] = {
     "vault_allow_copy": (["--vault-allow-copy"], {"prefer": "copy"}),
 }
 
-NOT_IMPLEMENTED = "not implemented yet"
-
 
 @dataclass
 class Observed:
@@ -106,8 +104,7 @@ def test_no_secret_leaks(name, variant, observe):
 
     assert observed.leaks == [], (
         f"{name} ({variant}) leaked a secret via: {', '.join(observed.leaks)}")
-    implemented = not any(NOT_IMPLEMENTED in text for _, text in observed.messages)
-    if name in FILL_TYPE and implemented and observed.exit_code == 0:
+    if name in FILL_TYPE and observed.exit_code == 0:
         sinks = observed.js + observed.clipboard
         assert any(SECRET_MARKER in s for s in sinks), (
             f"{name} ({variant}) exited 0 but no secret reached the page or clipboard; "
