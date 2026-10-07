@@ -1,0 +1,23 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "qutewarden"
+version = "0.1.0"
+description = "Bitwarden (rbw) userscript for qutebrowser"
+requires-python = ">=3.11"
+license = "GPL-3.0-or-later"
+dependencies = ["tldextract"]
+
+[project.scripts]
+qutewarden = "qutewarden.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/qutewarden"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-ra --strict-markers"
+markers = ["browser: needs playwright + chromium (deselect with -m 'not browser')"]
