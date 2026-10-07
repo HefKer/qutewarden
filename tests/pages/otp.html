@@ -1,0 +1,17 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Two-factor authentication</title></head>
+<body>
+  <form id="search" action="/search">
+    <input type="search" name="q" id="q">
+  </form>
+  <form id="two-factor" action="/session/2fa" method="post">
+    <label>Authentication code
+      <input type="text" name="app_otp" id="otp" autocomplete="one-time-code"
+             inputmode="numeric" maxlength="6">
+    </label>
+    <label><input type="checkbox" name="remember" id="remember"> Remember this device</label>
+    <button type="submit">Verify</button>
+  </form>
+</body>
+</html>
