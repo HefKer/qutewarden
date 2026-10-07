@@ -36,6 +36,8 @@ def select_candidate(ctx: Context, *, prompt: str = "Fill") -> Selection:
     found = match.candidates(ctx.backend.list_logins(), page_url,
                              default_mode=ctx.config.matching_default_mode,
                              extractor=_extractor(ctx))
+    if len(found) == 1 and ctx.config.auto_fill:
+        return Selection(page_url, origin, found[0])
     index = ctx.picker.choose(prompt, [item_line(item) for item in found])
     if index is None:
         raise UserCancelled()

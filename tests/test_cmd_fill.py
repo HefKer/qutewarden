@@ -10,6 +10,7 @@ from fakes.picker import FakePicker
 from qutewarden import cli
 from qutewarden.backend.fake import FakeBackend, fake_password, fake_totp
 from qutewarden.model import ItemUri, LoginItem
+from qutewarden.qute import Qute
 
 GITHUB = "https://github.com/login"
 EXAMPLE = "https://example.com/signin"
@@ -25,7 +26,7 @@ def fill(ctx, fake_qutebrowser):
 
         def make_context(config, env):
             return dataclasses.replace(
-                ctx, config=config, environ=env,
+                ctx, config=config, environ=env, qute=Qute.from_environ(env),
                 backend=backend if backend is not None else ctx.backend,
                 picker=picker if picker is not None else ctx.picker)
 
@@ -58,3 +59,23 @@ def test_the_fill_is_announced_before_the_script_is_sent(fill, fake_qutebrowser)
     message = next(i for i, c in enumerate(fake_qutebrowser.commands) if c.startswith("message"))
     jseval = next(i for i, c in enumerate(fake_qutebrowser.commands) if c.startswith("jseval"))
     assert message < jseval
+
+
+def test_one_candidate_with_auto_fill_is_filled_without_the_picker(
+        fill, fake_picker, fake_qutebrowser):
+    assert fill("--auto-fill", url=EXAMPLE) == 0
+    assert fake_picker.lines == []
+    [js] = fake_qutebrowser.js
+    assert f'"password": "{fake_password("example")}"' in js
+
+
+def test_one_candidate_without_auto_fill_still_shows_the_picker(
+        fill, fake_picker, fake_qutebrowser):
+    assert fill(url=EXAMPLE) == 0
+    assert fake_picker.lines == [["Example — bob"]]
+    assert len(fake_qutebrowser.js) == 1
+
+
+def test_several_candidates_with_auto_fill_show_the_picker(fill, fake_picker):
+    assert fill("--auto-fill") == 0
+    assert fake_picker.lines == [["GitHub — alice", "GitHub (work) — alice-work"]]
