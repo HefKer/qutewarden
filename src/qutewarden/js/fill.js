@@ -180,14 +180,43 @@ function fillAuto(root, a, focused) {
   return fillLogin(root, a, focused);
 }
 
+const SUBMIT_SELECTORS = [
+  "button[type=submit], input[type=submit], input[type=image]",
+  "button:not([type])",
+  "button[type=button], [role=button]",
+];
+
+// Nearest submit-looking button around `el` (for forms without a <form>).
+function findSubmitButton(el) {
+  for (let node = el.parentElement; node; node = node.parentElement) {
+    for (const selector of SUBMIT_SELECTORS) {
+      const button = Array.from(node.querySelectorAll(selector))
+        .find((b) => !b.disabled && b.getClientRects().length > 0);
+      if (button) return button;
+    }
+  }
+  return null;
+}
+
+function submitAfter(field) {
+  if (field.form) {
+    field.form.requestSubmit();
+    return;
+  }
+  const button = findSubmitButton(field);
+  if (button) button.click();
+}
+
 function qutewardenFill(a) {
   if (location.origin !== a.origin) return;
   const focused = focusedInput();
   const root = scopeFor(focused);
+  let filled = [];
   switch (a.mode) {
-    case "auto": fillAuto(root, a, focused); break;
-    case "login": fillLogin(root, a, focused); break;
-    case "otp": fillOtp(root, a, focused); break;
-    case "new_password": fillNewPassword(root, a); break;
+    case "auto": filled = fillAuto(root, a, focused); break;
+    case "login": filled = fillLogin(root, a, focused); break;
+    case "otp": filled = fillOtp(root, a, focused); break;
+    case "new_password": filled = fillNewPassword(root, a); break;
   }
+  if (a.submit && filled.length) submitAfter(filled[filled.length - 1]);
 }

@@ -239,6 +239,25 @@ def test_focused_input_decides_which_fields_get_filled(page, focus, filled):
     assert values(page, *ALL_TWO_FORMS) == expected
 
 
+@pytest.mark.parametrize(("submit", "submitted"), [(False, 0), (True, 1)])
+def test_form_is_submitted_only_when_asked(page, submit, submitted):
+    load(page, "login_single.html")
+    run_isolated(page, render_fill_js(
+        expected_origin=ORIGIN, mode="auto", username="alice", password="QWSECRET-pw",
+        submit=submit,
+    ))
+    assert page.evaluate("window.submitted") == submitted
+
+
+def test_submit_without_form_clicks_the_submit_button(page):
+    load(page, "react_like.html")
+    run_isolated(page, render_fill_js(
+        expected_origin=ORIGIN, mode="auto", username="alice", password="QWSECRET-pw",
+        submit=True,
+    ))
+    assert page.evaluate("window.clicked") == 1
+
+
 @pytest.mark.parametrize("served_at", [
     "https://evil.example.test",
     "http://login.example.test",          # same host, other scheme
