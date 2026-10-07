@@ -14,7 +14,7 @@ from qutewarden.model import MatchMode
 from qutewarden.qute import Qute
 
 SUBCOMMANDS = ["fill", "totp", "generate", "vault", "unlock", "lock", "sync", "status"]
-STUBS = ["totp", "vault"]  # shrinks as tickets land
+STUBS = ["vault"]  # shrinks as tickets land
 
 
 @pytest.fixture
