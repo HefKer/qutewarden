@@ -9,12 +9,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from typing import TYPE_CHECKING
+
 from qutewarden import match
 from qutewarden.context import Context
 from qutewarden.errors import QutewardenError, UserCancelled
 from qutewarden.filljs import render_fill_js
 from qutewarden.fillroute import send_js
 from qutewarden.model import LoginItem
+
+if TYPE_CHECKING:
+    from qutewarden.clipboard import Clipboard
 
 
 @dataclass(frozen=True)
@@ -82,13 +87,37 @@ def fill_login(ctx: Context, selection: Selection) -> None:
     js = render_fill_js(expected_origin=selection.origin, mode="auto",
                         username=item.username, password=secrets.password,
                         totp=secrets.totp, submit=ctx.config.submit_after_fill)
-    ctx.qute.message_info(f"filling {_describe(item)}")
+    ctx.qute.message_info(f"filling {describe(item)}")
     send_js(ctx.qute, js, runtime_dir=ctx.runtime_dir, timeout=ctx.fill_timeout)
     if ctx.config.insert_mode_after_fill:
         ctx.qute.enter_insert_mode()
 
 
-def _describe(item: LoginItem) -> str:
+def require_clipboard(ctx: Context) -> Clipboard:
+    """The clipboard, or an error if neither wl-copy nor xclip was found.
+
+    Call it before fetching the secret you want to copy.
+    """
+    if ctx.clipboard is None:
+        raise QutewardenError("no clipboard tool found (install wl-clipboard for wl-copy, "
+                              "or xclip)")
+    return ctx.clipboard
+
+
+def copy_secret(ctx: Context, item: LoginItem, what: str, value: str, *,
+                clear_after: int) -> None:
+    """Copy one of ``item``'s secrets (``what``: "TOTP", "password"...) and say so.
+
+    The clipboard is cleared after ``clear_after`` seconds if it still holds
+    ``value`` (Security rule 4). The message names the Item, never the value.
+    """
+    require_clipboard(ctx).copy_secret(value, clear_after=clear_after)
+    ctx.qute.message_info(f"copied {what} for {describe(item)}; "
+                          f"clipboard clears in {clear_after} s")
+
+
+def describe(item: LoginItem) -> str:
+    """The Item for messages: name and username (Security rule 6 allows both)."""
     return f"{item.name} ({item.username})" if item.username else item.name
 
 
