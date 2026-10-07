@@ -75,6 +75,12 @@ def _candidates(ctx: Context, page_url: str) -> list[LoginItem]:
                             extractor=_extractor(ctx))
 
 
+def is_candidate(ctx: Context, item: LoginItem, page_url: str) -> bool:
+    """Whether ``item`` is a Candidate for the page (Security rule 5)."""
+    return match.is_candidate(item, page_url, default_mode=ctx.config.matching_default_mode,
+                              extractor=_extractor(ctx))
+
+
 def item_line(item: LoginItem) -> str:
     """One picker line: the Item name and username."""
     return f"{item.name} — {item.username}" if item.username else item.name

@@ -38,7 +38,7 @@ def run(ctx: Context, args: argparse.Namespace) -> int:
             return 0
     page_url = ctx.qute.url or ""
     origin = match.origin_of(page_url)
-    if not _is_candidate(ctx, item, page_url) and not _confirm_mismatch(ctx, item, origin):
+    if not flow.is_candidate(ctx, item, page_url) and not _confirm_mismatch(ctx, item, origin):
         raise UserCancelled()
     flow.fill_login(ctx, flow.Selection(page_url, origin, item))
     return 0
@@ -64,11 +64,6 @@ def _copy(ctx: Context, item: LoginItem, field: str) -> None:
     if not value:
         raise QutewardenError(f"{flow.describe(item)} has no {field}")
     flow.copy_secret(ctx, item, field, value, clear_after=ctx.config.vault_copy_clear_seconds)
-
-
-def _is_candidate(ctx: Context, item: LoginItem, page_url: str) -> bool:
-    return match.is_candidate(item, page_url, default_mode=ctx.config.matching_default_mode,
-                              extractor=flow._extractor(ctx))
 
 
 def _confirm_mismatch(ctx: Context, item: LoginItem, origin: str) -> bool:
