@@ -1,0 +1,3 @@
+# Standalone replacement for qutebrowser's bundled `qute-bitwarden`
+
+qutebrowser includes a `qute-bitwarden` userscript, which is itself a fork of an earlier script. It has serious flaws, and those flaws are why this project exists: it fills by typing fake keystrokes, so credentials show up in plain text in `qute://log`; it picks Items by name instead of URI match, so nothing stops it filling on a look-alike origin; and it only supports filling. We are building a separate project with its own name rather than patching upstream. Upstream userscripts have to stay single-file with minimal dependencies, and that rules out the injected JavaScript, separate fill channel and multi-feature scope this project needs.
