@@ -13,6 +13,7 @@ from fakes.qutebrowser import FakeQutebrowser
 from qutewarden.backend.fake import FakeBackend
 from qutewarden.config import load_config
 from qutewarden.context import Context
+from qutewarden.match import make_suffix_extractor
 from qutewarden.qute import Qute
 
 
@@ -78,4 +79,5 @@ def ctx(qute_environ: dict[str, str], fake_backend: FakeBackend, fake_picker: Fa
         cache_dir=Path(qute_environ["XDG_CACHE_HOME"]) / "qutewarden",
         generate_password=lambda config: "QWSECRET-generated",
         fill_timeout=2.0,
+        suffix_extractor=make_suffix_extractor(Path(qute_environ["XDG_CACHE_HOME"]), offline=True),
     )
