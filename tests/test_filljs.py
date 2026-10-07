@@ -67,3 +67,42 @@ def test_single_step_login_fills_username_and_password(page):
     assert values(page, "username", "password", "q", "hidden-text", "csrf") == {
         "username": "alice", "password": "QWSECRET-pw", "q": "", "hidden-text": "", "csrf": "tok",
     }
+
+
+def test_fires_bubbling_input_and_change_events(page):
+    load(page, "login_single.html")
+    page.evaluate("""() => {
+        window.bubbled = [];
+        for (const t of ["input", "change"]) {
+            document.addEventListener(t, (e) => window.bubbled.push([e.target.id, e.type]));
+        }
+    }""")
+    run_isolated(page, render_fill_js(
+        expected_origin=ORIGIN, mode="login", username="alice", password="QWSECRET-pw",
+    ))
+    assert page.evaluate("window.bubbled") == [
+        ["username", "input"], ["username", "change"],
+        ["password", "input"], ["password", "change"],
+    ]
+
+
+def test_script_returns_nothing(page):
+    load(page, "login_single.html")
+    result = run_isolated(page, render_fill_js(
+        expected_origin=ORIGIN, mode="login", username="alice", password="QWSECRET-pw",
+    ))
+    assert result == {"type": "undefined"}
+
+
+@pytest.mark.parametrize("served_at", [
+    "https://evil.example.test",
+    "http://login.example.test",          # same host, other scheme
+    "https://login.example.test:8443",    # same host, other port
+])
+def test_origin_mismatch_fills_nothing(page, served_at):
+    load(page, "login_single.html", origin=served_at)
+    run_isolated(page, render_fill_js(
+        expected_origin=ORIGIN, mode="login", username="alice", password="QWSECRET-pw",
+    ))
+    assert values(page, "username", "password") == {"username": "", "password": ""}
+    assert page.evaluate("window.events") == []
