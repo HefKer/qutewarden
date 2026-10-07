@@ -27,8 +27,8 @@ See [ADR-0001](docs/adr/0001-standalone-replacement-for-upstream-userscript.md) 
 |---|---|
 | `fill` | Fill username and password (or a TOTP code on OTP-only pages) from the Items that match the current page |
 | `totp` | Fill the TOTP code of a matching Item, or copy it if `totp.clipboard` is on |
-| `generate` | Generate a password, save it to the vault, then fill it into a signup or change-password form |
-| `vault` | Pick from the whole vault; filling an Item that doesn't match the page needs a confirmation |
+| `generate` | Generate a password, save it to the vault, then fill it into a signup or change-password form. With no matching Item it creates one named after the host, using the username typed on the page (or asking for it); with one, it asks before replacing that Item's password; with several, you pick one or `new Item` |
+| `vault` | Pick from the whole vault; filling an Item that doesn't match the page needs a confirmation. With `vault.allow_copy` on, a second menu offers `Fill`, `Copy password`, `Copy TOTP` and `Copy username` |
 | `unlock` / `lock` / `sync` / `status` | Vault controls; `status` shows locked/unlocked and the last sync time |
 
 Each Item in the picker is shown as `<name> — <username>`. With no matching Item, `fill` syncs once and tries again; if there's still nothing, use `vault`.
@@ -165,7 +165,7 @@ Limits:
 - **Clipboard opt-ins are a real Leak path.** Anything on the clipboard can be read by other programs and clipboard managers until it is cleared. On Wayland, `wl-copy --sensitive` asks clipboard managers not to keep it; not all honour that.
 - **No reply from the page.** qutewarden can't learn whether a Fill worked, so it says "filling `<name>`" before sending. If the origin check fails in the page (for example, you switched tab or the page navigated), nothing is filled and nothing is reported.
 - **The page sees the filled values.** The fill script runs in its own isolated JavaScript world, so page scripts can't read its variables, but once a value is in a form field the page's own scripts can read it, as with any password manager.
-- **`generate` saves before it fills**, so a failed save never leaves you with a password that exists only in the form. The username is read from the page's username field; if there is none, the picker asks for it.
+- **`generate` saves before it fills**, so a failed save never leaves you with a password that exists only in the form. To create a new Item it runs twice: the first run copies the page's username into a `data-qutewarden-probe-<nonce>` attribute and spawns `qutewarden generate … --username-probe <nonce>`, which reads it from qutebrowser's DOM dump; the password is generated only in that second run ([ADR-0004](docs/adr/0004-generate-reads-the-username-back-through-the-dom-dump.md)). If no username comes back, the picker asks for it.
 - qutewarden relies on the layout of rbw's local db file for URI match modes ([ADR-0003](docs/adr/0003-rbw-1-15-and-match-types-from-its-db.md)); it only ever reads that file.
 
 ## Development
