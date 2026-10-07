@@ -6,6 +6,7 @@ build-backend = "hatchling.build"
 name = "qutewarden"
 version = "0.1.0"
 description = "Bitwarden (rbw) userscript for qutebrowser"
+readme = "README.md"
 requires-python = ">=3.11"
 license = "GPL-3.0-or-later"
 dependencies = ["tldextract"]
