@@ -94,6 +94,24 @@ def test_script_returns_nothing(page):
     assert result == {"type": "undefined"}
 
 
+@pytest.mark.parametrize("mode", ["auto", "login"])
+def test_two_step_login_fills_what_each_page_has(page, mode):
+    js = render_fill_js(
+        expected_origin=ORIGIN, mode=mode, username="alice@example.test",
+        password="QWSECRET-pw", totp="123456",
+    )
+    load(page, "login_two_step_1.html")
+    run_isolated(page, js)
+    assert values(page, "username") == {"username": "alice@example.test"}
+
+    load(page, "login_two_step_2.html")
+    run_isolated(page, js)
+    assert values(page, "identifier", "shown", "password") == {
+        "identifier": "alice@example.test", "shown": "alice@example.test",
+        "password": "QWSECRET-pw",
+    }
+
+
 @pytest.mark.parametrize("served_at", [
     "https://evil.example.test",
     "http://login.example.test",          # same host, other scheme
