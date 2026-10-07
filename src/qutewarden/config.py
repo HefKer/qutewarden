@@ -9,7 +9,7 @@ from __future__ import annotations
 import shlex
 import tomllib
 from collections.abc import Mapping
-from dataclasses import dataclass, fields
+from dataclasses import dataclass
 from pathlib import Path
 
 from qutewarden.errors import QutewardenError
@@ -80,6 +80,100 @@ class Config:
     vault_copy_clear_seconds: int = 30
 
 
+def default_config_path(environ: Mapping[str, str]) -> Path:
+    """``$XDG_CONFIG_HOME/qutewarden/config.toml``, falling back to ``~/.config``."""
+    base = environ.get("XDG_CONFIG_HOME") or ""
+    if not base:
+        home = environ.get("HOME") or str(Path.home())
+        base = str(Path(home) / ".config")
+    return Path(base) / "qutewarden" / "config.toml"
+
+
+_BY_KEY: dict[str, Setting] = {s.key: s for s in SETTINGS}
+_BY_ATTR: dict[str, Setting] = {s.attr: s for s in SETTINGS}
+
+
 def load_config(path: Path | None, overrides: Mapping[str, object]) -> Config:
-    """Build a Config: defaults < TOML at ``path`` < ``overrides`` (keyed by attr)."""
-    return Config()
+    """Build a Config: defaults < TOML at ``path`` < ``overrides`` (keyed by attr).
+
+    A missing file means defaults. ``overrides`` may contain unrelated keys
+    (e.g. ``vars(namespace)``); only Setting attrs are used.
+    """
+    values: dict[str, object] = {}
+    if path is not None:
+        for key, raw in _read_toml(path).items():
+            setting = _BY_KEY[key]
+            values[setting.attr] = _coerce(setting, raw)
+    for attr, raw in overrides.items():
+        setting = _BY_ATTR.get(attr)
+        if setting is not None:
+            values[attr] = _coerce(setting, raw)
+    return Config(**values)
+
+
+def _read_toml(path: Path) -> dict[str, object]:
+    """Read ``path`` and flatten it to ``{dotted key: value}``."""
+    try:
+        with path.open("rb") as f:
+            data = tomllib.load(f)
+    except FileNotFoundError:
+        return {}
+    except tomllib.TOMLDecodeError as e:
+        raise ConfigError(f"{path}: invalid TOML: {e}") from None
+    except OSError as e:
+        raise ConfigError(f"{path}: cannot read: {e.strerror}") from None
+
+    flat: dict[str, object] = {}
+
+    def walk(table: Mapping[str, object], prefix: str) -> None:
+        for name, value in table.items():
+            key = prefix + name
+            if key in _BY_KEY:
+                flat[key] = value
+            elif isinstance(value, dict) and any(k.startswith(key + ".") for k in _BY_KEY):
+                walk(value, key + ".")
+            else:
+                raise ConfigError(f"{path}: unknown setting {key!r}")
+
+    walk(data, "")
+    return flat
+
+
+def _coerce(setting: Setting, raw: object) -> object:
+    """Check ``raw`` against the setting's type and convert it."""
+    t = setting.type
+    if t is tuple:
+        if raw is None:
+            return None
+        if isinstance(raw, str):
+            argv = tuple(shlex.split(raw))
+        elif isinstance(raw, (list, tuple)) and all(isinstance(x, str) for x in raw):
+            argv = tuple(raw)
+        else:
+            raise ConfigError(f"{setting.key} must be a command string or a list of strings")
+        if not argv:
+            raise ConfigError(f"{setting.key} must not be empty")
+        return argv
+    if t is bool:
+        if not isinstance(raw, bool):
+            raise ConfigError(f"{setting.key} must be true or false")
+        return raw
+    if t is int:
+        if isinstance(raw, bool) or not isinstance(raw, int):
+            raise ConfigError(f"{setting.key} must be an integer")
+        if setting.attr == "generator_length" and raw < 4:
+            raise ConfigError(f"{setting.key} must be at least 4")
+        if raw < 0:
+            raise ConfigError(f"{setting.key} must not be negative")
+        return raw
+    if t is MatchMode:
+        try:
+            return MatchMode(raw)
+        except ValueError:
+            choices = ", ".join(m.value for m in MatchMode)
+            raise ConfigError(f"{setting.key} must be one of: {choices}") from None
+    if not isinstance(raw, str):
+        raise ConfigError(f"{setting.key} must be a string")
+    if setting.attr == "backend" and raw != "rbw":
+        raise ConfigError(f"{setting.key}: unknown backend {raw!r} (v1 supports only 'rbw')")
+    return raw
