@@ -32,7 +32,7 @@ from qutewarden.context import Context
 # Subcommands whose job is to get a secret into the page (or, if configured,
 # the clipboard). For these the test also checks that the marker *did* reach
 # one of those sinks, which proves the test is wired up.
-FILL_TYPE = {"fill", "totp", "generate"}
+FILL_TYPE = {"fill", "totp", "generate", "vault"}
 
 # config variant -> (flags, FakePicker keyword arguments)
 VARIANTS: dict[str, tuple[list[str], dict]] = {
