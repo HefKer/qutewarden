@@ -167,11 +167,4 @@ def _fill(ctx: Context, origin: str, item: LoginItem, password: str, *,
     # Only the new-password fields are filled (spec, `generate` step 3).
     js = render_fill_js(expected_origin=origin, mode="new_password", password=password,
                         submit=ctx.config.submit_after_fill, probe_nonce=probe_nonce)
-    ctx.qute.message_info(f"saved new password, filling {_describe(item)}")
-    send_js(ctx.qute, js, runtime_dir=ctx.runtime_dir, timeout=ctx.fill_timeout)
-    if ctx.config.insert_mode_after_fill:
-        ctx.qute.enter_insert_mode()
-
-
-def _describe(item: LoginItem) -> str:
-    return f"{item.name} ({item.username})" if item.username else item.name
+    flow.send_fill(ctx, js, f"saved new password, filling {flow.describe(item)}")

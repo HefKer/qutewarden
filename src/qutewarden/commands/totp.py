@@ -9,7 +9,6 @@ from qutewarden.commands import register
 from qutewarden.context import Context
 from qutewarden.errors import QutewardenError
 from qutewarden.filljs import render_fill_js
-from qutewarden.fillroute import send_js
 
 
 @register("totp", help="Fill (or copy) a Candidate's TOTP code")
@@ -31,8 +30,5 @@ def run(ctx: Context, args: argparse.Namespace) -> int:
         return 0
     js = render_fill_js(expected_origin=selection.origin, mode="otp", totp=code,
                         submit=ctx.config.submit_after_fill)
-    ctx.qute.message_info(f"filling TOTP for {flow.describe(item)}")
-    send_js(ctx.qute, js, runtime_dir=ctx.runtime_dir, timeout=ctx.fill_timeout)
-    if ctx.config.insert_mode_after_fill:
-        ctx.qute.enter_insert_mode()
+    flow.send_fill(ctx, js, f"filling TOTP for {flow.describe(item)}")
     return 0

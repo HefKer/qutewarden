@@ -93,7 +93,16 @@ def fill_login(ctx: Context, selection: Selection) -> None:
     js = render_fill_js(expected_origin=selection.origin, mode="auto",
                         username=item.username, password=secrets.password,
                         totp=secrets.totp, submit=ctx.config.submit_after_fill)
-    ctx.qute.message_info(f"filling {describe(item)}")
+    send_fill(ctx, js, f"filling {describe(item)}")
+
+
+def send_fill(ctx: Context, js: str, message: str) -> None:
+    """Announce a Fill, send its script through the fill route, then insert mode.
+
+    qutewarden gets no reply from the page, so ``message`` is shown first and
+    must be neutral. Insert mode follows ``insert_mode_after_fill``.
+    """
+    ctx.qute.message_info(message)
     send_js(ctx.qute, js, runtime_dir=ctx.runtime_dir, timeout=ctx.fill_timeout)
     if ctx.config.insert_mode_after_fill:
         ctx.qute.enter_insert_mode()
