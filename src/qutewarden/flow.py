@@ -33,6 +33,7 @@ def select_candidate(ctx: Context, *, prompt: str = "Fill") -> Selection:
     """
     page_url = ctx.qute.url or ""
     origin = match.origin_of(page_url)
+    ensure_unlocked(ctx)
     found = find_candidates(ctx, page_url)
     if not found:
         raise QutewardenError(f"no Login item matches {origin}; "
@@ -43,6 +44,12 @@ def select_candidate(ctx: Context, *, prompt: str = "Fill") -> Selection:
     if index is None:
         raise UserCancelled()
     return Selection(page_url, origin, found[index])
+
+
+def ensure_unlocked(ctx: Context) -> None:
+    """Unlock the vault if it's locked; the Backend asks for the master password."""
+    if not ctx.backend.is_unlocked():
+        ctx.backend.unlock()
 
 
 def find_candidates(ctx: Context, page_url: str) -> list[LoginItem]:
@@ -77,6 +84,8 @@ def fill_login(ctx: Context, selection: Selection) -> None:
                         totp=secrets.totp, submit=ctx.config.submit_after_fill)
     ctx.qute.message_info(f"filling {_describe(item)}")
     send_js(ctx.qute, js, runtime_dir=ctx.runtime_dir, timeout=ctx.fill_timeout)
+    if ctx.config.insert_mode_after_fill:
+        ctx.qute.enter_insert_mode()
 
 
 def _describe(item: LoginItem) -> str:

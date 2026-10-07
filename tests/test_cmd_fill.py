@@ -114,3 +114,52 @@ def test_candidates_found_first_time_do_not_sync(fill):
     backend = FakeBackend()
     fill(backend=backend)
     assert "sync" not in backend.calls
+
+
+def test_a_cancelled_picker_fills_nothing_and_exits_quietly(fill, fake_qutebrowser):
+    backend = FakeBackend()
+    assert fill(backend=backend, picker=FakePicker(choices=[None])) == 0
+    assert "get_secrets" not in backend.calls
+    assert fake_qutebrowser.js == []
+    assert fake_qutebrowser.commands == []
+
+
+def test_a_locked_vault_is_unlocked_before_listing(fill, fake_qutebrowser):
+    backend = FakeBackend(unlocked=False)
+    assert fill(backend=backend) == 0
+    assert backend.calls.index("unlock") < backend.calls.index("list_logins")
+    assert len(fake_qutebrowser.js) == 1
+
+
+def test_an_unlocked_vault_is_not_unlocked_again(fill):
+    backend = FakeBackend()
+    fill(backend=backend)
+    assert "unlock" not in backend.calls
+
+
+def test_insert_mode_is_entered_after_the_fill(fill, fake_qutebrowser):
+    fill()
+    assert fake_qutebrowser.commands[-1] == "mode-enter insert"
+
+
+def test_insert_mode_can_be_turned_off(fill, fake_qutebrowser):
+    fill("--no-insert-mode-after-fill")
+    assert "mode-enter insert" not in fake_qutebrowser.commands
+    assert len(fake_qutebrowser.js) == 1
+
+
+@pytest.mark.parametrize("flags, submit", [((), "false"), (("--submit-after-fill",), "true")])
+def test_the_form_is_submitted_only_if_configured(fill, fake_qutebrowser, flags, submit):
+    fill(*flags)
+    [js] = fake_qutebrowser.js
+    assert f'"submit": {submit}' in js
+
+
+@pytest.mark.parametrize("url", ["file:///home/alice/login.html", "qute://settings", ""])
+def test_a_non_http_page_is_refused_before_any_secret_is_fetched(fill, fake_qutebrowser, url):
+    backend = FakeBackend()
+    assert fill(url=url, backend=backend) == 1
+    assert "get_secrets" not in backend.calls
+    assert fake_qutebrowser.js == []
+    [(level, _)] = fake_qutebrowser.messages
+    assert level == "error"
