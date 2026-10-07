@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from qutewarden import cli
+from qutewarden.backend.base import BackendError, BackendUnavailable, NotLoggedIn, UnlockFailed
 from qutewarden.backend.fake import FakeBackend
 from qutewarden.context import Context
 from qutewarden.qute import Qute
@@ -71,3 +72,69 @@ def test_status_without_a_known_last_sync(environ):
     code, lines = run("status", backend, environ)
     assert code == 0
     assert lines == [["message-info", "qutewarden: vault locked, last sync unknown"]]
+
+
+def test_unlock_unlocks_a_locked_vault(environ):
+    backend = FakeBackend(unlocked=False)
+    code, lines = run("unlock", backend, environ)
+    assert code == 0
+    assert backend.unlocked
+    assert lines == [["message-info", "qutewarden: vault unlocked"]]
+
+
+class FailingBackend(FakeBackend):
+    """A FakeBackend whose every vault-control call raises ``error``."""
+
+    def __init__(self, error: BackendError) -> None:
+        super().__init__(unlocked=False)
+        self.error = error
+
+    def unlock(self):
+        raise self.error
+
+    def lock(self):
+        raise self.error
+
+    def sync(self):
+        raise self.error
+
+    def status(self):
+        raise self.error
+
+
+@pytest.mark.parametrize("name", ["unlock", "lock", "sync", "status"])
+@pytest.mark.parametrize("error, expected", [
+    (NotLoggedIn("rbw isn't logged in", hint="run `rbw login`"),
+     "qutewarden: rbw isn't logged in (run `rbw login`)"),
+    (BackendUnavailable("can't run rbw", hint="install rbw >= 1.15"),
+     "qutewarden: can't run rbw (install rbw >= 1.15)"),
+    (UnlockFailed("rbw couldn't unlock the vault"),
+     "qutewarden: rbw couldn't unlock the vault"),
+])
+def test_backend_errors_become_a_message_error_saying_what_to_do(name, error, expected, environ):
+    code, lines = run(name, FailingBackend(error), environ)
+    assert code == 1
+    assert lines == [["message-error", expected]]
+
+
+def test_unlock_without_login_tells_the_user_to_log_in(environ):
+    code, lines = run("unlock", FakeBackend(unlocked=False, logged_in=False), environ)
+    assert code == 1
+    assert lines == [["message-error",
+                      "qutewarden: not logged in (log in to the fake backend)"]]
+
+
+def test_lock_locks_an_unlocked_vault(environ):
+    backend = FakeBackend(unlocked=True)
+    code, lines = run("lock", backend, environ)
+    assert code == 0
+    assert not backend.unlocked
+    assert lines == [["message-info", "qutewarden: vault locked"]]
+
+
+def test_sync_syncs_the_vault(environ):
+    backend = FakeBackend(unlocked=True)
+    code, lines = run("sync", backend, environ)
+    assert code == 0
+    assert backend.calls == ["sync"]
+    assert lines == [["message-info", "qutewarden: vault synced"]]
