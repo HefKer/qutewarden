@@ -53,3 +53,38 @@ def test_picking_a_candidate_fills_it_without_asking(vault, fake_qutebrowser):
     assert '"origin": "https://github.com"' in js
     assert "Yes" not in sum(picker.lines, [])
     assert fake_qutebrowser.messages == [("info", "qutewarden: filling GitHub (work) (alice-work)")]
+
+
+def test_a_mismatch_fill_asks_first_showing_the_items_uris_next_to_the_page_origin(
+        vault, fake_qutebrowser):
+    picker = FakePicker(choices=[5], confirm=True)  # Elsewhere: https://other.test
+    assert vault(picker=picker) == 0
+    assert picker.prompts[-1] == "Fill Elsewhere (erin) on https://github.com?"
+    assert picker.lines[-1] == ["Page: https://github.com", "Item: https://other.test",
+                                "Yes", "No"]
+    [js] = fake_qutebrowser.js
+    assert f'"password": "{fake_password("elsewhere")}"' in js
+    assert '"origin": "https://github.com"' in js
+
+
+def test_a_declined_mismatch_fill_fills_nothing(vault, fake_qutebrowser):
+    backend = FakeBackend()
+    assert vault(picker=FakePicker(choices=[5], confirm=False), backend=backend) == 0
+    assert fake_qutebrowser.js == []
+    assert fake_qutebrowser.messages == []
+    assert "get_secrets" not in backend.calls
+
+
+def test_an_item_whose_uri_is_set_to_never_match_is_a_mismatch(vault):
+    picker = FakePicker(choices=[4], confirm=False)  # Never: github.com/login, mode NEVER
+    vault(picker=picker)
+    assert picker.lines[-1] == ["Page: https://github.com", "Item: https://github.com/login",
+                                "Yes", "No"]
+
+
+def test_a_mismatch_with_an_item_that_has_no_uris_says_so(vault):
+    from qutewarden.model import LoginItem
+    backend = FakeBackend([LoginItem(id="bare", name="Bare", username="zoe")])
+    picker = FakePicker(confirm=False)
+    vault(picker=picker, backend=backend)
+    assert picker.lines[-1] == ["Page: https://github.com", "Item: (no URIs)", "Yes", "No"]
