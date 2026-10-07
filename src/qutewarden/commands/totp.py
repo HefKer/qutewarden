@@ -14,6 +14,9 @@ from qutewarden.fillroute import send_js
 
 @register("totp", help="Fill (or copy) a Candidate's TOTP code")
 def run(ctx: Context, args: argparse.Namespace) -> int:
+    copy = ctx.config.totp_clipboard
+    if copy:
+        flow.require_clipboard(ctx)
     selection = flow.select_candidate(ctx, prompt="TOTP")
     item = selection.item
     no_totp = QutewardenError(f"{flow.describe(item)} has no TOTP")
@@ -22,6 +25,10 @@ def run(ctx: Context, args: argparse.Namespace) -> int:
     code = ctx.backend.get_secrets(item.id).totp
     if not code:
         raise no_totp
+    if copy:
+        flow.copy_secret(ctx, item, "TOTP", code,
+                         clear_after=ctx.config.totp_clipboard_clear_seconds)
+        return 0
     js = render_fill_js(expected_origin=selection.origin, mode="otp", totp=code,
                         submit=ctx.config.submit_after_fill)
     ctx.qute.message_info(f"filling TOTP for {flow.describe(item)}")

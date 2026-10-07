@@ -70,3 +70,22 @@ def test_an_item_whose_backend_returns_no_code_shows_the_same_message(totp, fake
     assert totp(url=NO_TOTP, backend=backend) == 1
     assert fake_qutebrowser.js == []
     assert fake_qutebrowser.messages == [("error", "qutewarden: No TOTP (carol) has no TOTP")]
+
+
+def test_with_totp_clipboard_the_code_is_copied_instead_of_filled(
+        totp, fake_qutebrowser, fake_clipboard):
+    assert totp("--totp-clipboard", "--totp-clipboard-clear-seconds", "12") == 0
+    assert fake_clipboard.copies == [(fake_totp("github"), 12)]
+    assert fake_qutebrowser.js == []
+    assert "mode-enter insert" not in fake_qutebrowser.commands
+    assert fake_qutebrowser.messages == [
+        ("info", "qutewarden: copied TOTP for GitHub (alice); clipboard clears in 12 s")]
+
+
+def test_with_totp_clipboard_but_no_clipboard_tool_it_is_an_error(totp, fake_qutebrowser):
+    backend = FakeBackend()
+    assert totp("--totp-clipboard", backend=backend, clipboard=None) == 1
+    assert "get_secrets" not in backend.calls
+    [(level, text)] = fake_qutebrowser.messages
+    assert level == "error"
+    assert "wl-copy" in text and "xclip" in text
