@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import dataclasses
+import re
+import shlex
+import sys
 
 import pytest
 
@@ -115,3 +118,73 @@ def test_a_cancelled_picker_saves_and_fills_nothing(generate, fake_qutebrowser):
     assert generate(backend=backend, picker=FakePicker(choices=[None])) == 0
     assert backend.updated == [] and backend.created == []
     assert fake_qutebrowser.commands == []
+
+
+
+# --- No Candidates: read the username back from the page (ADR-0004) -------------
+
+NEW_SITE = "https://new-site.test/signup"
+NONCE = "0123456789abcdef"
+
+
+@pytest.fixture
+def argv0(monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["/opt/bin/qutewarden", "generate"])
+    return "/opt/bin/qutewarden"
+
+
+def spawned(commands: list[str]) -> list[str]:
+    [line] = [c for c in commands if c.startswith("spawn ")]
+    return shlex.split(line)
+
+
+def test_no_candidates_probes_the_page_and_respawns_without_saving(
+        generate, ctx, fake_qutebrowser, argv0):
+    backend = FakeBackend()
+    ctx.generate_password = lambda config: pytest.fail("generated before the second run")
+    assert generate(url=NEW_SITE, backend=backend) == 0
+    assert backend.created == [] and backend.updated == []
+    [js] = fake_qutebrowser.js
+    assert "QWSECRET" not in js
+    assert '"mode": "probe"' in js
+    assert '"origin": "https://new-site.test"' in js
+    nonce = re.search(r'"probeNonce": "([0-9a-f]+)"', js).group(1)
+    assert len(nonce) == 16
+    assert spawned(fake_qutebrowser.commands) == [
+        "spawn", "--userscript", argv0, "generate", "--username-probe", nonce]
+    kinds = [c.split()[0] for c in fake_qutebrowser.commands]
+    assert kinds == ["jseval", "spawn"]
+
+
+def test_the_second_run_keeps_the_settings_flags(generate, fake_qutebrowser, argv0, tmp_path):
+    config = tmp_path / "other.toml"
+    config.write_text("")
+    generate("--generator-length", "9", "--no-generator-symbols", "--submit-after-fill",
+             "--picker", "rofi -dmenu -i", "--config", str(config), url=NEW_SITE)
+    argv = spawned(fake_qutebrowser.commands)
+    assert argv[:4] == ["spawn", "--userscript", argv0, "generate"]
+    flags = argv[4:]
+    assert flags[-2] == "--username-probe"
+    assert set(_pairs(flags[:-2])) == {
+        ("--generator-length", "9"), ("--no-generator-symbols", None),
+        ("--submit-after-fill", None), ("--picker", "rofi -dmenu -i"),
+        ("--config", str(config))}
+
+
+def _pairs(flags: list[str]):
+    i = 0
+    while i < len(flags):
+        if i + 1 < len(flags) and not flags[i + 1].startswith("--"):
+            yield flags[i], flags[i + 1]
+            i += 2
+        else:
+            yield flags[i], None
+            i += 1
+
+
+def test_choosing_new_item_among_several_candidates_probes_the_page(
+        generate, fake_qutebrowser, argv0):
+    backend = FakeBackend()
+    assert generate(backend=backend, picker=FakePicker(choices=[2])) == 0
+    assert backend.created == [] and backend.updated == []
+    assert spawned(fake_qutebrowser.commands)[-2] == "--username-probe"
