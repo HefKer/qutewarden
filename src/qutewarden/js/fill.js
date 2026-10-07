@@ -52,7 +52,7 @@ function looksLikeUsername(el) {
 // Username field: autocomplete=username/email first, then the nearest
 // text-ish input before the password field, then a username-looking input.
 function findUsernameField(root, passwordField) {
-  const texts = usableInputs(root).filter(isTextish);
+  const texts = usableInputs(root).filter((el) => isTextish(el) && !looksLikeOtp(el));
   const byAutocomplete = texts.find(
     (el) => hasAutocomplete(el, "username") || hasAutocomplete(el, "email"));
   if (byAutocomplete) return byAutocomplete;
@@ -97,7 +97,45 @@ function fillLogin(root, a) {
   return filled;
 }
 
+const OTP_NAME = /otp|totp|2fa|mfa|one.?time|verification|code|token/i;
+
+function looksLikeOtp(el) {
+  if (hasAutocomplete(el, "one-time-code")) return true;
+  if (!(isTextish(el) || inputType(el) === "number")) return false;
+  if (!OTP_NAME.test(`${el.name} ${el.id}`)) return false;
+  const max = el.maxLength;
+  return (max >= 4 && max <= 8) || (el.getAttribute("inputmode") || "") === "numeric";
+}
+
+function findOtpField(root) {
+  const inputs = usableInputs(root);
+  return inputs.find((el) => hasAutocomplete(el, "one-time-code"))
+    || inputs.find(looksLikeOtp) || null;
+}
+
+function fillOtp(root, a, focused) {
+  if (a.totp == null) return [];
+  const field = (focused && isTextish(focused) && focused) || findOtpField(root);
+  if (!field) return [];
+  setValue(field, a.totp);
+  return [field];
+}
+
+// Page-kind decision for `auto` (Python can't get a reply from the page):
+// a password field means a login page; else an OTP field means an OTP page;
+// else fill whatever login fields there are (two-step page 1).
+function fillAuto(root, a) {
+  if (passwordFields(root).length) return fillLogin(root, a);
+  if (findOtpField(root)) return fillOtp(root, a, null);
+  return fillLogin(root, a);
+}
+
 function qutewardenFill(a) {
   if (location.origin !== a.origin) return;
-  fillLogin(document, a);
+  const root = document;
+  switch (a.mode) {
+    case "auto": fillAuto(root, a); break;
+    case "login": fillLogin(root, a); break;
+    case "otp": fillOtp(root, a, null); break;
+  }
 }

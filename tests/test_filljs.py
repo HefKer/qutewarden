@@ -112,6 +112,45 @@ def test_two_step_login_fills_what_each_page_has(page, mode):
     }
 
 
+@pytest.mark.parametrize("mode", ["auto", "otp"])
+def test_otp_page_gets_the_totp_code(page, mode):
+    load(page, "otp.html")
+    run_isolated(page, render_fill_js(
+        expected_origin=ORIGIN, mode=mode, username="alice", password="QWSECRET-pw",
+        totp="123456",
+    ))
+    assert values(page, "otp", "q") == {"otp": "123456", "q": ""}
+
+
+def test_otp_field_found_by_name_without_autocomplete(page):
+    load(page, "otp.html")
+    page.evaluate("document.getElementById('otp').removeAttribute('autocomplete')")
+    run_isolated(page, render_fill_js(
+        expected_origin=ORIGIN, mode="auto", username="alice", password="QWSECRET-pw",
+        totp="123456",
+    ))
+    assert values(page, "otp", "q") == {"otp": "123456", "q": ""}
+
+
+def test_otp_page_without_totp_code_fills_nothing(page):
+    load(page, "otp.html")
+    run_isolated(page, render_fill_js(
+        expected_origin=ORIGIN, mode="auto", username="alice", password="QWSECRET-pw",
+    ))
+    assert values(page, "otp", "q") == {"otp": "", "q": ""}
+
+
+def test_login_page_in_auto_mode_does_not_get_the_totp_code(page):
+    load(page, "login_single.html")
+    run_isolated(page, render_fill_js(
+        expected_origin=ORIGIN, mode="auto", username="alice", password="QWSECRET-pw",
+        totp="123456",
+    ))
+    assert values(page, "username", "password", "q") == {
+        "username": "alice", "password": "QWSECRET-pw", "q": "",
+    }
+
+
 @pytest.mark.parametrize("served_at", [
     "https://evil.example.test",
     "http://login.example.test",          # same host, other scheme
