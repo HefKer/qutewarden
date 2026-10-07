@@ -1,0 +1,12 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Sign in: step 2</title></head>
+<body>
+  <form id="challenge" action="/session" method="post">
+    <input type="hidden" name="identifier" id="identifier" value="alice@example.test">
+    <input type="email" id="shown" value="alice@example.test" readonly>
+    <label>Password <input type="password" name="password" id="password"></label>
+    <button type="submit">Sign in</button>
+  </form>
+</body>
+</html>
