@@ -64,8 +64,9 @@ def test_single_step_login_fills_username_and_password(page):
     run_isolated(page, render_fill_js(
         expected_origin=ORIGIN, mode="login", username="alice", password="QWSECRET-pw",
     ))
-    assert values(page, "username", "password", "q", "hidden-text", "csrf") == {
-        "username": "alice", "password": "QWSECRET-pw", "q": "", "hidden-text": "", "csrf": "tok",
+    assert values(page, "username", "password", "q", "hidden-text", "disabled-text", "csrf") == {
+        "username": "alice", "password": "QWSECRET-pw", "q": "", "hidden-text": "",
+        "disabled-text": "", "csrf": "tok",
     }
 
 
