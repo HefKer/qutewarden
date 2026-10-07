@@ -18,13 +18,30 @@ def run(ctx: Context, args: argparse.Namespace) -> int:
     page_url = ctx.qute.url or ""
     origin = match.origin_of(page_url)
     flow.ensure_unlocked(ctx)
-    [item] = flow.find_candidates(ctx, page_url)
-    if not ctx.picker.confirm(f"Replace password for {item.username} on {item.name}?"):
-        raise UserCancelled()
+    item = _choose_item(ctx, flow.find_candidates(ctx, page_url))
     password = ctx.generate_password(ctx.config)
     ctx.backend.update_password(item.id, password)
     _fill(ctx, origin, item, password)
     return 0
+
+
+NEW_ITEM_LINE = "new Item"
+
+
+def _choose_item(ctx: Context, found: list[LoginItem]) -> LoginItem | None:
+    """The Candidate whose password to replace, or None for a new Item."""
+    if not found:
+        return None
+    if len(found) == 1:
+        [item] = found
+        if not ctx.picker.confirm(f"Replace password for {item.username} on {item.name}?"):
+            raise UserCancelled()
+        return item
+    index = ctx.picker.choose("Replace password",
+                              [*(flow.item_line(item) for item in found), NEW_ITEM_LINE])
+    if index is None:
+        raise UserCancelled()
+    return found[index] if index < len(found) else None
 
 
 def _fill(ctx: Context, origin: str, item: LoginItem, password: str) -> None:

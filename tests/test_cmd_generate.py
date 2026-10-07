@@ -91,3 +91,27 @@ def test_the_password_comes_from_the_generator_settings(generate, ctx, fake_qute
     ctx.generate_password = lambda config: seen.append(config.generator_length) or GENERATED
     generate("--generator-length", "9", url=EXAMPLE)
     assert seen == [9]
+
+
+# --- Several Candidates -------------------------------------------------------
+
+def test_several_candidates_offer_each_item_and_a_new_item(generate, fake_picker):
+    generate()
+    assert fake_picker.lines[0] == ["GitHub — alice", "GitHub (work) — alice-work", "new Item"]
+
+
+def test_the_picked_candidate_is_updated_and_filled(generate, fake_qutebrowser):
+    backend = FakeBackend()
+    assert generate(backend=backend, picker=FakePicker(choices=[1])) == 0
+    assert backend.updated == [("github-alt", GENERATED)]
+    assert backend.created == []
+    [js] = fake_qutebrowser.js
+    assert f'"password": "{GENERATED}"' in js
+    assert '"username": "alice-work"' in js
+
+
+def test_a_cancelled_picker_saves_and_fills_nothing(generate, fake_qutebrowser):
+    backend = FakeBackend()
+    assert generate(backend=backend, picker=FakePicker(choices=[None])) == 0
+    assert backend.updated == [] and backend.created == []
+    assert fake_qutebrowser.commands == []
