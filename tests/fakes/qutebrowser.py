@@ -56,13 +56,16 @@ class FakeQutebrowser:
 
     def _run(self) -> None:
         while True:
+            # Read the flag *before* select: everything written before close()
+            # is then already in the pipe, so an empty select really means done.
+            stopping = self._stop.is_set()
             ready, _, _ = select.select([self._fd], [], [], 0.01)
             if ready:
                 self._buffer += os.read(self._fd, 65536)
                 while b"\n" in self._buffer:
                     line, self._buffer = self._buffer.split(b"\n", 1)
                     self._handle(line.decode("utf-8"))
-            elif self._stop.is_set():
+            elif stopping:
                 return
 
     def _handle(self, line: str) -> None:
