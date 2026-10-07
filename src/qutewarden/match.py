@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import ipaddress
 import re
+from collections.abc import Iterable
 from pathlib import Path
 from typing import NamedTuple
 from urllib.parse import urlsplit
@@ -17,7 +18,7 @@ from urllib.parse import urlsplit
 import tldextract
 
 from qutewarden.errors import QutewardenError
-from qutewarden.model import ItemUri, MatchMode
+from qutewarden.model import ItemUri, LoginItem, MatchMode
 
 _DEFAULT_PORTS = {"http": 80, "https": 443}
 
@@ -36,6 +37,35 @@ def make_suffix_extractor(cache_dir: Path, *, offline: bool = False) -> tldextra
         cache_dir=str(Path(cache_dir) / "tldextract"),
         include_psl_private_domains=True,
         **kwargs,
+    )
+
+
+def candidates(
+    items: Iterable[LoginItem],
+    page_url: str,
+    *,
+    default_mode: MatchMode,
+    extractor: tldextract.TLDExtract,
+) -> list[LoginItem]:
+    """The Candidates among ``items`` for the page, in their original order."""
+    return [
+        item
+        for item in items
+        if is_candidate(item, page_url, default_mode=default_mode, extractor=extractor)
+    ]
+
+
+def is_candidate(
+    item: LoginItem,
+    page_url: str,
+    *,
+    default_mode: MatchMode,
+    extractor: tldextract.TLDExtract,
+) -> bool:
+    """An Item is a Candidate when any of its URIs match. Its name is never used."""
+    return any(
+        uri_matches(uri, page_url, default_mode=default_mode, extractor=extractor)
+        for uri in item.uris
     )
 
 

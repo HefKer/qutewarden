@@ -3,8 +3,14 @@
 import pytest
 
 from qutewarden.errors import QutewardenError
-from qutewarden.match import make_suffix_extractor, origin_of, uri_matches
-from qutewarden.model import ItemUri, MatchMode
+from qutewarden.match import (
+    candidates,
+    is_candidate,
+    make_suffix_extractor,
+    origin_of,
+    uri_matches,
+)
+from qutewarden.model import ItemUri, LoginItem, MatchMode
 
 
 @pytest.mark.parametrize(
@@ -116,3 +122,53 @@ URI_CASES = [
 def test_uri_matches(extractor, uri, mode, page, expected):
     item_uri = ItemUri(uri, mode)
     assert uri_matches(item_uri, page, default_mode=BD, extractor=extractor) is expected
+
+
+# --- Candidates ----------------------------------------------------------------
+
+PAGE = "https://github.com/login"
+
+
+@pytest.mark.parametrize(
+    ("default_mode", "expected"),
+    [(BD, True), (HOST, False), (NEVER, False)],
+)
+def test_uri_without_mode_uses_default_mode(extractor, default_mode, expected):
+    item_uri = ItemUri("https://gist.github.com")
+    assert uri_matches(item_uri, PAGE, default_mode=default_mode, extractor=extractor) is expected
+
+
+def test_explicit_mode_beats_default_mode(extractor):
+    item_uri = ItemUri("https://gist.github.com", MatchMode.BASE_DOMAIN)
+    assert uri_matches(item_uri, PAGE, default_mode=NEVER, extractor=extractor)
+
+
+ITEMS = (
+    LoginItem("one", "GitHub", "alice", (ItemUri("https://github.com"),)),
+    LoginItem(
+        "any",
+        "work",
+        "bob",
+        (ItemUri("https://gitlab.com"), ItemUri("https://github.com/login", MatchMode.EXACT)),
+    ),
+    LoginItem("never", "GitHub", "carol", (ItemUri("https://github.com", MatchMode.NEVER),)),
+    LoginItem("no-uris", "github.com", "dave"),  # name looks right, but names are never used
+    LoginItem("other", "github", "erin", (ItemUri("https://other.test"),)),
+)
+
+
+def test_candidates_are_items_with_any_matching_uri(extractor):
+    found = candidates(ITEMS, PAGE, default_mode=BD, extractor=extractor)
+    assert [item.id for item in found] == ["one", "any"]
+
+
+@pytest.mark.parametrize("item", ITEMS, ids=lambda item: item.id)
+def test_is_candidate(extractor, item):
+    expected = item.id in {"one", "any"}
+    assert is_candidate(item, PAGE, default_mode=BD, extractor=extractor) is expected
+
+
+def test_item_without_uris_is_never_a_candidate(extractor):
+    item = LoginItem("no-uris", "github.com")
+    for mode in MatchMode:
+        assert not is_candidate(item, PAGE, default_mode=mode, extractor=extractor)
