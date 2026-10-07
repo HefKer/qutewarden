@@ -163,14 +163,15 @@ def test_login_page_in_auto_mode_does_not_get_the_totp_code(page):
     }
 
 
-def test_signup_fills_new_password_and_confirmation(page):
+def test_signup_fills_only_new_password_and_confirmation(page):
+    # Spec `generate` step 3: only new-password fields, never an empty username.
     load(page, "signup.html")
     run_isolated(page, render_fill_js(
         expected_origin=ORIGIN, mode="new_password", username="alice",
         password="QWSECRET-generated",
     ))
     assert values(page, "username", "email", "password", "confirm", "hidden-password") == {
-        "username": "alice", "email": "", "password": "QWSECRET-generated",
+        "username": "", "email": "", "password": "QWSECRET-generated",
         "confirm": "QWSECRET-generated", "hidden-password": "",
     }
 

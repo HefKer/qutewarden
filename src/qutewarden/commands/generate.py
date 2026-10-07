@@ -164,8 +164,8 @@ def _flag(setting: Setting, value: object) -> list[str]:
 
 def _fill(ctx: Context, origin: str, item: LoginItem, password: str, *,
           probe_nonce: str | None = None) -> None:
-    js = render_fill_js(expected_origin=origin, mode="new_password",
-                        username=item.username, password=password,
+    # Only the new-password fields are filled (spec, `generate` step 3).
+    js = render_fill_js(expected_origin=origin, mode="new_password", password=password,
                         submit=ctx.config.submit_after_fill, probe_nonce=probe_nonce)
     ctx.qute.message_info(f"saved new password, filling {_describe(item)}")
     send_js(ctx.qute, js, runtime_dir=ctx.runtime_dir, timeout=ctx.fill_timeout)

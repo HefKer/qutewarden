@@ -110,7 +110,7 @@ def test_the_picked_candidate_is_updated_and_filled(generate, fake_qutebrowser):
     assert backend.created == []
     [js] = fake_qutebrowser.js
     assert f'"password": "{GENERATED}"' in js
-    assert '"username": "alice-work"' in js
+    assert '"username": null' in js
 
 
 def test_a_cancelled_picker_saves_and_fills_nothing(generate, fake_qutebrowser):
@@ -213,7 +213,7 @@ def test_second_run_creates_the_item_with_the_username_from_the_page(
     assert '"mode": "new_password"' in js
     assert f'"password": "{GENERATED}"' in js
     assert f'"probeNonce": "{NONCE}"' in js
-    assert '"username": "frank@mail.test"' in js
+    assert '"username": null' in js
     assert fake_qutebrowser.messages == [
         ("info", "qutewarden: saved new password, filling new-site.test (frank@mail.test)")]
     assert not any(c.startswith("spawn") for c in fake_qutebrowser.commands)
