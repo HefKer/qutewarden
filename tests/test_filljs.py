@@ -259,7 +259,28 @@ def test_submit_without_form_clicks_the_submit_button(page):
     assert page.evaluate("window.clicked") == 1
 
 
-PROBE_ATTR = "data-qutewarden-probe-0123abcd"
+def test_submit_without_form_never_clicks_a_show_password_toggle(page):
+    load(page, "login_toggle.html")
+    run_isolated(page, render_fill_js(
+        expected_origin=ORIGIN, mode="auto", username="alice", password="QWSECRET-pw",
+        submit=True,
+    ))
+    assert page.evaluate("window.clicks") == ["submit"]
+
+
+def test_submit_without_form_or_safe_button_clicks_nothing(page):
+    load(page, "login_toggle.html")
+    page.evaluate("document.getElementById('submit').remove()")
+    run_isolated(page, render_fill_js(
+        expected_origin=ORIGIN, mode="auto", username="alice", password="QWSECRET-pw",
+        submit=True,
+    ))
+    assert page.evaluate("window.clicks") == []
+    assert values(page, "username", "password") == {
+        "username": "alice", "password": "QWSECRET-pw"}
+
+
+PROBE_ATTR ="data-qutewarden-probe-0123abcd"
 
 
 def probe_attr(page):

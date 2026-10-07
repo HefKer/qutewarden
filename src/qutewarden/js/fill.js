@@ -184,30 +184,56 @@ function fillAuto(root, a, focused) {
   return fillLogin(root, a, focused);
 }
 
+// Submit controls for pages without a <form>, best first. Each selector is
+// tried across every ancestor before the next one, so a real submit button
+// further out beats a generic button next to the field.
 const SUBMIT_SELECTORS = [
   "button[type=submit], input[type=submit], input[type=image]",
   "button:not([type])",
   "button[type=button], [role=button]",
 ];
+const EXPLICIT_SUBMIT = SUBMIT_SELECTORS[0];
 
-// Nearest submit-looking button around `el` (for forms without a <form>).
-function findSubmitButton(el) {
-  for (let node = el.parentElement; node; node = node.parentElement) {
-    for (const selector of SUBMIT_SELECTORS) {
+const TOGGLE_WORDS = /show|hide|reveal|toggle|visib|eye|peek/i;
+
+function looksLikeToggle(el) {
+  if (el.hasAttribute("aria-pressed")) return true;
+  const words = ["aria-label", "title", "id", "class", "name"]
+    .map((attr) => el.getAttribute(attr) || "").join(" ");
+  return TOGGLE_WORDS.test(`${words} ${el.textContent || ""}`);
+}
+
+// A generic button is unsafe to click if it sits in a filled field's own
+// wrapper (show-password toggles, clear buttons) or looks like a toggle.
+function isSafeButton(button, filled) {
+  if (button.disabled || button.getClientRects().length === 0) return false;
+  if (button.matches(EXPLICIT_SUBMIT)) return true;
+  if (filled.some((field) => field.parentElement && field.parentElement.contains(button))) {
+    return false;
+  }
+  return !looksLikeToggle(button);
+}
+
+// Nearest safe submit control around the filled fields (no <form>), or null.
+function findSubmitButton(filled) {
+  const start = filled[filled.length - 1];
+  for (const selector of SUBMIT_SELECTORS) {
+    for (let node = start.parentElement; node; node = node.parentElement) {
       const button = Array.from(node.querySelectorAll(selector))
-        .find((b) => !b.disabled && b.getClientRects().length > 0);
+        .find((b) => isSafeButton(b, filled));
       if (button) return button;
     }
   }
   return null;
 }
 
-function submitAfter(field) {
+function submitAfter(filled) {
+  const field = filled[filled.length - 1];
   if (field.form) {
     field.form.requestSubmit();
     return;
   }
-  const button = findSubmitButton(field);
+  const button = findSubmitButton(filled);
   if (button) button.click();
 }
 
@@ -239,5 +265,5 @@ function qutewardenFill(a) {
     case "otp": filled = fillOtp(root, a, focused); break;
     case "new_password": filled = fillNewPassword(root, a); break;
   }
-  if (a.submit && filled.length) submitAfter(filled[filled.length - 1]);
+  if (a.submit && filled.length) submitAfter(filled);
 }
