@@ -4,9 +4,10 @@ A new Item needs the username the user typed on the page, and a userscript
 can't get a value back from ``jseval``. So that case runs in two stages
 (ADR-0004): the first run sends a secret-free probe script that copies the
 username field into a ``data-qutewarden-probe-<nonce>`` attribute, then
-spawns ``generate --username-probe <nonce>``. qutebrowser dumps the DOM to
-``QUTE_HTML`` for that second run, which reads the attribute, generates,
-saves and fills. The password exists only in the second run.
+spawns ``generate --probe-origin <origin> --username-probe <nonce>``.
+qutebrowser dumps the DOM to ``QUTE_HTML`` for that second run, which checks
+the page is still on that origin, reads the attribute, generates, saves and
+fills. The password exists only in the second run.
 """
 
 from __future__ import annotations
@@ -37,6 +38,8 @@ def _add_arguments(parser: argparse.ArgumentParser) -> None:
     # Internal: set by the first stage when it spawns the second (ADR-0004).
     parser.add_argument("--username-probe", metavar="NONCE", default=None,
                         help=argparse.SUPPRESS)
+    parser.add_argument("--probe-origin", metavar="ORIGIN", default=None,
+                        help=argparse.SUPPRESS)
 
 
 @register("generate", help="Generate a password, save it to the vault, then fill it",
@@ -48,6 +51,9 @@ def run(ctx: Context, args: argparse.Namespace) -> int:
     if nonce is not None:
         if not _NONCE_RE.fullmatch(nonce):
             raise QutewardenError("generate: malformed --username-probe")
+        if args.probe_origin != origin:
+            # The user switched tabs or navigated since stage 1.
+            raise QutewardenError("generate: the page changed; nothing saved")
         return _create_item(ctx, page_url, origin, nonce)
     flow.ensure_unlocked(ctx)
     item = _choose_item(ctx, flow.find_candidates(ctx, page_url))
@@ -126,7 +132,8 @@ def _probe_username(ctx: Context, args: argparse.Namespace, origin: str) -> None
     send_js(ctx.qute, render_probe_js(expected_origin=origin, nonce=nonce),
             runtime_dir=ctx.runtime_dir, timeout=ctx.fill_timeout)
     ctx.qute.spawn_userscript([os.path.abspath(sys.argv[0]), "generate",
-                               *_settings_flags(args), "--username-probe", nonce])
+                               *_settings_flags(args), "--probe-origin", origin,
+                               "--username-probe", nonce])
 
 
 def _settings_flags(args: argparse.Namespace) -> list[str]:

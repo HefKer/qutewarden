@@ -125,6 +125,7 @@ def test_a_cancelled_picker_saves_and_fills_nothing(generate, fake_qutebrowser):
 
 NEW_SITE = "https://new-site.test/signup"
 NONCE = "0123456789abcdef"
+STAGE2 = ("--probe-origin", "https://new-site.test", "--username-probe", NONCE)
 
 
 @pytest.fixture
@@ -151,7 +152,8 @@ def test_no_candidates_probes_the_page_and_respawns_without_saving(
     nonce = re.search(r'"probeNonce": "([0-9a-f]+)"', js).group(1)
     assert len(nonce) == 16
     assert spawned(fake_qutebrowser.commands) == [
-        "spawn", "--userscript", argv0, "generate", "--username-probe", nonce]
+        "spawn", "--userscript", argv0, "generate",
+        "--probe-origin", "https://new-site.test", "--username-probe", nonce]
     kinds = [c.split()[0] for c in fake_qutebrowser.commands]
     assert kinds == ["jseval", "spawn"]
 
@@ -168,7 +170,7 @@ def test_the_second_run_keeps_the_settings_flags(generate, fake_qutebrowser, arg
     assert set(_pairs(flags[:-2])) == {
         ("--generator-length", "9"), ("--no-generator-symbols", None),
         ("--submit-after-fill", None), ("--picker", "rofi -dmenu -i"),
-        ("--config", str(config))}
+        ("--config", str(config)), ("--probe-origin", "https://new-site.test")}
 
 
 def _pairs(flags: list[str]):
@@ -202,7 +204,7 @@ def test_second_run_creates_the_item_with_the_username_from_the_page(
     picker = FakePicker()
     html = (f'<!DOCTYPE html><html data-qutewarden-probe-{NONCE}="frank@mail.test">'
             '<body><input type="email"></body></html>')
-    assert generate("--username-probe", NONCE, url=NEW_SITE, backend=backend, picker=picker,
+    assert generate(*STAGE2, url=NEW_SITE, backend=backend, picker=picker,
                     environ=_dump(tmp_path, html)) == 0
     assert backend.created == [{"name": "new-site.test", "username": "frank@mail.test",
                                 "uri": "https://new-site.test", "password": GENERATED}]
@@ -221,7 +223,8 @@ def test_the_second_run_creates_even_when_candidates_exist(generate, tmp_path):
     # Stage 1 already offered the Candidates; the user chose "new Item".
     backend = FakeBackend()
     picker = FakePicker()
-    assert generate("--username-probe", NONCE, backend=backend, picker=picker,
+    assert generate("--probe-origin", "https://github.com", "--username-probe", NONCE,
+                    backend=backend, picker=picker,
                     environ=_dump(tmp_path, "<html></html>")) == 0
     assert picker.prompts == ["Username"]
     assert backend.updated == []
@@ -231,7 +234,7 @@ def test_the_second_run_creates_even_when_candidates_exist(generate, tmp_path):
 
 def test_the_new_item_has_no_match_mode(generate, tmp_path):
     backend = FakeBackend()
-    generate("--username-probe", NONCE, url=NEW_SITE, backend=backend,
+    generate(*STAGE2, url=NEW_SITE, backend=backend,
              environ=_dump(tmp_path, "<html></html>"))
     [created] = [i for i in backend.items if i.name == "new-site.test"]
     assert [u.mode for u in created.uris] == [None]
@@ -245,7 +248,7 @@ def test_the_new_item_has_no_match_mode(generate, tmp_path):
 def test_without_a_username_on_the_page_the_picker_asks_for_one(generate, tmp_path, html):
     backend = FakeBackend()
     picker = FakePicker(text="grace")
-    assert generate("--username-probe", NONCE, url=NEW_SITE, backend=backend, picker=picker,
+    assert generate(*STAGE2, url=NEW_SITE, backend=backend, picker=picker,
                     environ=_dump(tmp_path, html)) == 0
     assert picker.prompts == ["Username"]
     assert backend.created[0]["username"] == "grace"
@@ -254,14 +257,14 @@ def test_without_a_username_on_the_page_the_picker_asks_for_one(generate, tmp_pa
 def test_a_missing_dump_also_asks_for_the_username(generate):
     backend = FakeBackend()
     picker = FakePicker(text="grace")
-    assert generate("--username-probe", NONCE, url=NEW_SITE, backend=backend, picker=picker,
+    assert generate(*STAGE2, url=NEW_SITE, backend=backend, picker=picker,
                     environ={"QUTE_HTML": "/nonexistent/qute_html"}) == 0
     assert backend.created[0]["username"] == "grace"
 
 
 def test_an_empty_answer_creates_the_item_without_a_username(generate, tmp_path):
     backend = FakeBackend()
-    assert generate("--username-probe", NONCE, url=NEW_SITE, backend=backend,
+    assert generate(*STAGE2, url=NEW_SITE, backend=backend,
                     picker=FakePicker(text=""), environ=_dump(tmp_path, "<html></html>")) == 0
     assert backend.created[0]["username"] is None
 
@@ -269,7 +272,7 @@ def test_an_empty_answer_creates_the_item_without_a_username(generate, tmp_path)
 def test_cancelling_the_username_prompt_saves_and_fills_nothing(
         generate, fake_qutebrowser, tmp_path):
     backend = FakeBackend()
-    assert generate("--username-probe", NONCE, url=NEW_SITE, backend=backend,
+    assert generate(*STAGE2, url=NEW_SITE, backend=backend,
                     picker=FakePicker(text=None),
                     environ=_dump(tmp_path, "<html></html>")) == 0
     assert backend.created == []
@@ -278,7 +281,7 @@ def test_cancelling_the_username_prompt_saves_and_fills_nothing(
 
 def test_a_failed_create_fills_nothing(generate, fake_qutebrowser, tmp_path):
     backend = FakeBackend(fail_save=True)
-    assert generate("--username-probe", NONCE, url=NEW_SITE, backend=backend,
+    assert generate(*STAGE2, url=NEW_SITE, backend=backend,
                     environ=_dump(tmp_path, "<html></html>")) == 1
     assert fake_qutebrowser.js == []
     [(level, _)] = fake_qutebrowser.messages
@@ -287,15 +290,35 @@ def test_a_failed_create_fills_nothing(generate, fake_qutebrowser, tmp_path):
 
 def test_the_second_run_unlocks_a_locked_vault_before_saving(generate, tmp_path):
     backend = FakeBackend(unlocked=False)
-    assert generate("--username-probe", NONCE, url=NEW_SITE, backend=backend,
+    assert generate(*STAGE2, url=NEW_SITE, backend=backend,
                     environ=_dump(tmp_path, "<html></html>")) == 0
     assert backend.calls.index("unlock") < backend.calls.index("create_login")
 
 
 def test_a_malformed_probe_nonce_is_refused(generate):
     backend = FakeBackend()
-    assert generate("--username-probe", "x;y", url=NEW_SITE, backend=backend) == 1
+    assert generate("--probe-origin", "https://new-site.test", "--username-probe", "x;y",
+                    url=NEW_SITE, backend=backend) == 1
     assert backend.created == []
+
+
+@pytest.mark.parametrize("flags", [
+    ("--probe-origin", "https://other.test", "--username-probe", NONCE),
+    ("--username-probe", NONCE),
+])
+def test_the_second_run_aborts_if_the_page_origin_changed(
+        generate, fake_qutebrowser, tmp_path, flags):
+    # The user switched tabs or navigated between the stages.
+    backend = FakeBackend()
+    html = f'<html data-qutewarden-probe-{NONCE}="frank"></html>'
+    assert generate(*flags, url=NEW_SITE, backend=backend,
+                    environ=_dump(tmp_path, html)) == 1
+    assert backend.created == [] and backend.updated == []
+    assert fake_qutebrowser.js == []
+    [(level, text)] = fake_qutebrowser.messages
+    assert level == "error"
+    assert "page changed" in text
+    assert "frank" not in text
 
 
 def test_the_second_stage_keeps_the_password_in_the_pipe(
@@ -303,7 +326,7 @@ def test_the_second_stage_keeps_the_password_in_the_pipe(
     # The first stage never generates (see the probe test); the no-leak test
     # doesn't reach this second stage, so check it here.
     html = f'<html data-qutewarden-probe-{NONCE}="frank"></html>'
-    generate("--username-probe", NONCE, url=NEW_SITE, environ=_dump(tmp_path, html))
+    generate(*STAGE2, url=NEW_SITE, environ=_dump(tmp_path, html))
     out, err = capfd.readouterr()
     assert not any("QWSECRET" in c for c in fake_qutebrowser.commands)
     assert child_recorder.children == []

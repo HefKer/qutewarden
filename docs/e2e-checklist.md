@@ -54,7 +54,7 @@ Tick each box; note the qutebrowser, QtWebEngine and rbw versions at the top of 
 
 ## generate
 
-- [ ] Signup page of a site with **no** Item, username typed in the form: `,g` runs twice (ADR-0004): the first run probes the username and spawns `generate … --username-probe <16 hex>`, the second a Login item named after the host, with the page's origin as URI (no match mode) and the typed username; check with `rbw get --full <name>`. The new-password and confirmation fields are filled with the same password, and it equals `rbw get <name>`. The message reads `saved new password, filling <host> (<username>)`.
+- [ ] Signup page of a site with **no** Item, username typed in the form: `,g` runs twice (ADR-0004): the first run probes the username and spawns `generate … --probe-origin <origin> --username-probe <16 hex>`, the second a Login item named after the host, with the page's origin as URI (no match mode) and the typed username; check with `rbw get --full <name>`. The new-password and confirmation fields are filled with the same password, and it equals `rbw get <name>`. The message reads `saved new password, filling <host> (<username>)`.
 - [ ] Same, with a non-default flag (`generate --generator-length 32`): the second run keeps it (the saved password has 32 characters).
 - [ ] Same, but with the username field empty: the picker asks for a username.
 - [ ] Change-password page of A (one Candidate): `,g` asks "Replace password for `<username>` on `<name>`?"; Yes updates A and fills; `rbw get --full` shows the old password in A's history; A's notes are unchanged.
@@ -75,7 +75,7 @@ Tick each box; note the qutebrowser, QtWebEngine and rbw versions at the top of 
 
 After running everything above:
 
-- [ ] Open `qute://log?level=vdebug` and search (Ctrl+F) for A's password, A's current and recent TOTP codes, the generated passwords, and any copied field: **no hits**. The log should show only `message-info`/`message-error`, `mode-enter insert`, `jseval --quiet --world=213 --file …/qutewarden/fill-….js` and (from `generate`) `spawn --userscript …/qutewarden generate … --username-probe <nonce>` lines from qutewarden.
+- [ ] Open `qute://log?level=vdebug` and search (Ctrl+F) for A's password, A's current and recent TOTP codes, the generated passwords, and any copied field: **no hits**. The log should show only `message-info`/`message-error`, `mode-enter insert`, `jseval --quiet --world=213 --file …/qutewarden/fill-….js` and (from `generate`) `spawn --userscript …/qutewarden generate … --probe-origin <origin> --username-probe <nonce>` lines from qutewarden.
 - [ ] Also search `qute://log` for any Item notes or custom field values: no hits.
 - [ ] `:messages` (or the statusbar history) shows only Item names, usernames and origins.
 - [ ] `ls -la $XDG_RUNTIME_DIR/qutewarden/`: directory is `drwx------`, and no `fill-*.js` pipes are left behind.
