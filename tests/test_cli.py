@@ -3,16 +3,18 @@ from pathlib import Path
 
 import pytest
 
+from fakes.picker import FakePicker
 from qutewarden import cli
 from qutewarden.backend.fake import FakeBackend
 from qutewarden.commands import all_commands
 from qutewarden.config import Config
 from qutewarden.context import Context
+from qutewarden.match import make_suffix_extractor
 from qutewarden.model import MatchMode
 from qutewarden.qute import Qute
 
 SUBCOMMANDS = ["fill", "totp", "generate", "vault", "unlock", "lock", "sync", "status"]
-STUBS = ["fill", "totp", "generate", "vault"]  # shrinks as tickets land
+STUBS = ["totp", "generate", "vault"]  # shrinks as tickets land
 
 
 @pytest.fixture
@@ -44,10 +46,11 @@ class Recorder:
         self.config = config
         return Context(
             config=config, environ=environ, qute=Qute.from_environ(environ),
-            backend=FakeBackend(), picker=None, clipboard=None,
+            backend=FakeBackend(), picker=FakePicker(choices=[None]), clipboard=None,
             runtime_dir=Path(environ["XDG_RUNTIME_DIR"]) / "qutewarden",
             cache_dir=Path(environ["XDG_CACHE_HOME"]) / "qutewarden",
             generate_password=lambda cfg: "QWSECRET-generated",
+            suffix_extractor=make_suffix_extractor(Path(environ["XDG_CACHE_HOME"]), offline=True),
         )
 
 

@@ -17,6 +17,8 @@ from qutewarden.config import Config
 from qutewarden.qute import Qute
 
 if TYPE_CHECKING:
+    from tldextract import TLDExtract
+
     from qutewarden.backend.base import Backend
     from qutewarden.clipboard import Clipboard
     from qutewarden.picker import Picker
@@ -34,6 +36,9 @@ class Context:
     cache_dir: Path  # $XDG_CACHE_HOME/qutewarden
     generate_password: Callable[[Config], str]
     fill_timeout: float = 5.0  # seconds fillroute waits for qutebrowser to open the pipe
+    # Public Suffix List lookup for URI match; None = match.make_suffix_extractor(cache_dir).
+    # Tests pass an offline one (no network).
+    suffix_extractor: TLDExtract | None = None
 
     @classmethod
     def from_environ(cls, config: Config, environ: Mapping[str, str]) -> Context:
