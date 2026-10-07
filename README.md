@@ -8,7 +8,7 @@ Bitwarden for [qutebrowser](https://qutebrowser.org/). It fills logins and TOTP 
 
 qutebrowser includes a `qute-bitwarden` userscript, but:
 
-- it types credentials as fake keypresses, so they show up in plain text in `qute://log`
+- it types usernames and passwords as fake keypresses, so they show up in plain text in `qute://log`
 - it picks Items by **name** instead of URI, so nothing stops it filling on a look-alike domain
 - it can only fill
 
