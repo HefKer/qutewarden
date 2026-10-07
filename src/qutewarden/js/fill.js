@@ -121,6 +121,29 @@ function fillOtp(root, a, focused) {
   return [field];
 }
 
+// Every new-password field (password + confirmation), or every password
+// field if the page marks none; plus the username if its field is empty.
+function fillNewPassword(root, a) {
+  const passwords = passwordFields(root);
+  const marked = passwords.filter((el) => hasAutocomplete(el, "new-password"));
+  const targets = marked.length ? marked : passwords;
+  const filled = [];
+  if (a.username != null) {
+    const usernameField = findUsernameField(root, targets[0] || null);
+    if (usernameField && usernameField.value === "") {
+      setValue(usernameField, a.username);
+      filled.push(usernameField);
+    }
+  }
+  if (a.password != null) {
+    for (const el of targets) {
+      setValue(el, a.password);
+      filled.push(el);
+    }
+  }
+  return filled;
+}
+
 // Page-kind decision for `auto` (Python can't get a reply from the page):
 // a password field means a login page; else an OTP field means an OTP page;
 // else fill whatever login fields there are (two-step page 1).
@@ -137,5 +160,6 @@ function qutewardenFill(a) {
     case "auto": fillAuto(root, a); break;
     case "login": fillLogin(root, a); break;
     case "otp": fillOtp(root, a, null); break;
+    case "new_password": fillNewPassword(root, a); break;
   }
 }

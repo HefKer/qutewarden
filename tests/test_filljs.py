@@ -151,6 +151,44 @@ def test_login_page_in_auto_mode_does_not_get_the_totp_code(page):
     }
 
 
+def test_signup_fills_new_password_and_confirmation(page):
+    load(page, "signup.html")
+    run_isolated(page, render_fill_js(
+        expected_origin=ORIGIN, mode="new_password", username="alice",
+        password="QWSECRET-generated",
+    ))
+    assert values(page, "username", "email", "password", "confirm", "hidden-password") == {
+        "username": "alice", "email": "", "password": "QWSECRET-generated",
+        "confirm": "QWSECRET-generated", "hidden-password": "",
+    }
+
+
+def test_signup_keeps_a_username_the_user_typed(page):
+    load(page, "signup.html")
+    page.fill("#username", "typed-by-user")
+    run_isolated(page, render_fill_js(
+        expected_origin=ORIGIN, mode="new_password", username="alice",
+        password="QWSECRET-generated",
+    ))
+    assert values(page, "username", "password") == {
+        "username": "typed-by-user", "password": "QWSECRET-generated",
+    }
+
+
+def test_new_password_without_autocomplete_fills_every_password_field(page):
+    load(page, "signup.html")
+    page.evaluate("""() => {
+        for (const el of document.querySelectorAll('[autocomplete]')) el.removeAttribute('autocomplete');
+    }""")
+    run_isolated(page, render_fill_js(
+        expected_origin=ORIGIN, mode="new_password", password="QWSECRET-generated",
+    ))
+    assert values(page, "username", "password", "confirm", "hidden-password") == {
+        "username": "", "password": "QWSECRET-generated",
+        "confirm": "QWSECRET-generated", "hidden-password": "",
+    }
+
+
 @pytest.mark.parametrize("served_at", [
     "https://evil.example.test",
     "http://login.example.test",          # same host, other scheme
