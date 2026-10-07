@@ -295,6 +295,23 @@ def test_the_second_run_unlocks_a_locked_vault_before_saving(generate, tmp_path)
     assert backend.calls.index("unlock") < backend.calls.index("create_login")
 
 
+def test_a_new_item_that_is_no_candidate_is_saved_but_not_filled(
+        generate, fake_qutebrowser, tmp_path):
+    # The new Item's URI has no match mode, so matching.default_mode applies;
+    # with `never` it isn't a Candidate for the page (Security rule 5).
+    backend = FakeBackend()
+    html = f'<html data-qutewarden-probe-{NONCE}="frank"></html>'
+    assert generate("--matching-default-mode", "never", *STAGE2, url=NEW_SITE,
+                    backend=backend, environ=_dump(tmp_path, html)) == 0
+    assert [c["name"] for c in backend.created] == ["new-site.test"]
+    assert fake_qutebrowser.js == []
+    assert "mode-enter insert" not in fake_qutebrowser.commands
+    [(level, text)] = fake_qutebrowser.messages
+    assert level == "info"
+    assert text == ("qutewarden: saved new password for new-site.test (frank); "
+                    "not filled, it doesn't match this page")
+
+
 def test_a_malformed_probe_nonce_is_refused(generate):
     backend = FakeBackend()
     assert generate("--probe-origin", "https://new-site.test", "--username-probe", "x;y",

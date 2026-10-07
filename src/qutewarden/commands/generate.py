@@ -28,7 +28,7 @@ from qutewarden.context import Context
 from qutewarden.errors import QutewardenError, UserCancelled
 from qutewarden.filljs import render_fill_js, render_probe_js
 from qutewarden.fillroute import send_js
-from qutewarden.model import LoginItem
+from qutewarden.model import ItemUri, LoginItem
 
 NEW_ITEM_LINE = "new Item"
 _NONCE_RE = re.compile(r"[0-9a-f]{16}")
@@ -74,10 +74,16 @@ def _create_item(ctx: Context, page_url: str, origin: str, nonce: str) -> int:
         if username is None:
             raise UserCancelled()
     flow.ensure_unlocked(ctx)
-    item = LoginItem(id="", name=urlsplit(origin).hostname or origin, username=username or None)
+    item = LoginItem(id="", name=urlsplit(origin).hostname or origin, username=username or None,
+                     uris=(ItemUri(origin),))
     password = ctx.generate_password(ctx.config)
     ctx.backend.create_login(name=item.name, username=item.username, uri=origin,
                              password=password)
+    if not flow.is_candidate(ctx, item, page_url):
+        # E.g. matching.default_mode = never: saved, but no Fill (Security rule 5).
+        ctx.qute.message_info(f"saved new password for {flow.describe(item)}; "
+                              "not filled, it doesn't match this page")
+        return 0
     _fill(ctx, origin, item, password, probe_nonce=nonce)
     return 0
 
