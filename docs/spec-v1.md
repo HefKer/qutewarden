@@ -6,7 +6,7 @@ qutewarden does in qutebrowser what the Bitwarden browser extension does elsewhe
 
 - Python ≥ 3.11 (config is parsed with `tomllib`)
 - qutebrowser ≥ 3.0 on QtWebEngine (QtWebKit isn't supported)
-- Backend: `rbw` ≥ 1.14. That's the first version that enforces master password re-prompt.
+- Backend: `rbw` ≥ 1.15. 1.14 is the first version that enforces master password re-prompt; 1.15 adds URIs to `rbw list --raw`, which listing Items without a re-prompt storm needs (ADR-0003).
 - License: GPL-3.0-or-later
 - Delivery: a Python package with a Nix flake that installs a single `qutewarden` command. Users bind its subcommands with `spawn --userscript qutewarden <subcommand> [flags]`. The fill JavaScript ships inside the package.
 
@@ -96,7 +96,7 @@ The file is `$XDG_CONFIG_HOME/qutewarden/config.toml`. Every setting can be over
 
 ## Backend interface
 
-Built so `bw` can be added in v2 without changing callers. The calls are: `is_unlocked`, `unlock`, `lock`, `sync`, `status`, `list_logins` (no secrets: id, name, username, URIs with their modes), `get_secrets(id)` (password and TOTP code, through stdout only), `create_login`, `update_password`. The `rbw` implementation uses `rbw get --raw` and the other `rbw` subcommands, and passes secrets to `rbw add` and `rbw edit` through stdin, never through arguments. The implementation has to confirm that `rbw` reads from stdin when it isn't a terminal and doesn't open `$EDITOR`.
+Built so `bw` can be added in v2 without changing callers. The calls are: `is_unlocked`, `unlock`, `lock`, `sync`, `status`, `list_logins` (no secrets: id, name, username, URIs with their modes), `get_secrets(id)` (password and TOTP code, through stdout only), `create_login`, `update_password`. The `rbw` implementation (rbw ≥ 1.15) lists Items with `rbw list --raw` plus the match modes from rbw's local db file, reads secrets with one `rbw get --raw` per Item, uses the other `rbw` subcommands for the rest, and passes secrets to `rbw add` and `rbw edit` through stdin, never through arguments. rbw 1.15 reads stdin when it isn't a terminal and doesn't open `$EDITOR` (confirmed in its source; see ADR-0003).
 
 ## Testing
 
