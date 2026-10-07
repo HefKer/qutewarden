@@ -12,6 +12,7 @@ fill route (ADR-0002), never through a qutebrowser command.
 from __future__ import annotations
 
 import json
+import re
 from importlib import resources
 from typing import Literal, get_args
 
@@ -47,6 +48,8 @@ def render_fill_js(
     """
     if mode not in _FILL_MODES:
         raise ValueError(f"unknown fill mode: {mode!r}")
+    if probe_nonce is not None:
+        _check_nonce(probe_nonce)
     return _render({
         "origin": expected_origin,
         "mode": mode,
@@ -56,3 +59,28 @@ def render_fill_js(
         "submit": submit,
         "probeNonce": probe_nonce,
     })
+
+
+def render_probe_js(*, expected_origin: str, nonce: str) -> str:
+    """Return a secret-free script that copies the page's username into the DOM.
+
+    It writes the username field's value to the attribute
+    ``data-qutewarden-probe-<nonce>`` on ``<html>``, where qutebrowser's
+    ``QUTE_HTML`` dump for the next userscript run can read it (#8).
+    """
+    _check_nonce(nonce)
+    return _render({
+        "origin": expected_origin,
+        "mode": "probe",
+        "username": None,
+        "password": None,
+        "totp": None,
+        "submit": False,
+        "probeNonce": nonce,
+    })
+
+
+def _check_nonce(nonce: str) -> None:
+    # Becomes part of an attribute name: keep it to a known-safe alphabet.
+    if not re.fullmatch(r"[0-9a-f]{1,64}", nonce):
+        raise ValueError("probe nonce must be lowercase hex")

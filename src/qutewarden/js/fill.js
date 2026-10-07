@@ -150,10 +150,14 @@ function fillOtp(root, a, focused) {
 
 // Every new-password field (password + confirmation), or every password
 // field if the page marks none; plus the username if its field is empty.
-function fillNewPassword(root, a) {
+function newPasswordFields(root) {
   const passwords = passwordFields(root);
   const marked = passwords.filter((el) => hasAutocomplete(el, "new-password"));
-  const targets = marked.length ? marked : passwords;
+  return marked.length ? marked : passwords;
+}
+
+function fillNewPassword(root, a) {
+  const targets = newPasswordFields(root);
   const filled = [];
   if (a.username != null) {
     const usernameField = findUsernameField(root, targets[0] || null);
@@ -207,10 +211,27 @@ function submitAfter(field) {
   if (button) button.click();
 }
 
+function probeAttribute(nonce) {
+  return `data-qutewarden-probe-${nonce}`;
+}
+
+// Secret-free: copy the username the user typed on a signup page into an
+// attribute that qutebrowser's DOM dump (QUTE_HTML) carries back to Python.
+function probeUsername(root, focused, nonce) {
+  const field = (focused && isTextish(focused) && focused)
+    || findUsernameField(root, newPasswordFields(root)[0] || null);
+  document.documentElement.setAttribute(probeAttribute(nonce), field ? field.value : "");
+}
+
 function qutewardenFill(a) {
   if (location.origin !== a.origin) return;
   const focused = focusedInput();
   const root = scopeFor(focused);
+  if (a.mode === "probe") {
+    probeUsername(root, focused, a.probeNonce);
+    return;
+  }
+  if (a.probeNonce) document.documentElement.removeAttribute(probeAttribute(a.probeNonce));
   let filled = [];
   switch (a.mode) {
     case "auto": filled = fillAuto(root, a, focused); break;

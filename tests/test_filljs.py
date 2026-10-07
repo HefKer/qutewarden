@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from qutewarden.filljs import render_fill_js
+from qutewarden.filljs import render_fill_js, render_probe_js
 
 pytestmark = pytest.mark.browser
 sync_api = pytest.importorskip("playwright.sync_api")
@@ -256,6 +256,39 @@ def test_submit_without_form_clicks_the_submit_button(page):
         submit=True,
     ))
     assert page.evaluate("window.clicked") == 1
+
+
+PROBE_ATTR = "data-qutewarden-probe-0123abcd"
+
+
+def probe_attr(page):
+    return page.evaluate(f"document.documentElement.getAttribute('{PROBE_ATTR}')")
+
+
+def test_probe_writes_the_username_into_a_page_attribute(page):
+    load(page, "signup.html")
+    page.fill("#username", "alice")
+    page.fill("#password", "typed-password")
+    run_isolated(page, render_probe_js(expected_origin=ORIGIN, nonce="0123abcd"))
+    assert probe_attr(page) == "alice"
+
+
+def test_probe_on_other_origin_writes_nothing(page):
+    load(page, "signup.html", origin="https://evil.example.test")
+    page.fill("#username", "alice")
+    run_isolated(page, render_probe_js(expected_origin=ORIGIN, nonce="0123abcd"))
+    assert probe_attr(page) is None
+
+
+def test_new_password_fill_removes_the_probe_attribute(page):
+    load(page, "signup.html")
+    page.evaluate(f"document.documentElement.setAttribute('{PROBE_ATTR}', 'alice')")
+    run_isolated(page, render_fill_js(
+        expected_origin=ORIGIN, mode="new_password", username="alice",
+        password="QWSECRET-generated", probe_nonce="0123abcd",
+    ))
+    assert probe_attr(page) is None
+    assert values(page, "password") == {"password": "QWSECRET-generated"}
 
 
 @pytest.mark.parametrize("served_at", [
