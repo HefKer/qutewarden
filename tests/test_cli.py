@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from qutewarden import cli
+from qutewarden.backend.fake import FakeBackend
 from qutewarden.commands import all_commands
 from qutewarden.config import Config
 from qutewarden.context import Context
@@ -11,6 +12,7 @@ from qutewarden.model import MatchMode
 from qutewarden.qute import Qute
 
 SUBCOMMANDS = ["fill", "totp", "generate", "vault", "unlock", "lock", "sync", "status"]
+STUBS = ["fill", "totp", "generate", "vault"]  # shrinks as tickets land
 
 
 @pytest.fixture
@@ -42,7 +44,7 @@ class Recorder:
         self.config = config
         return Context(
             config=config, environ=environ, qute=Qute.from_environ(environ),
-            backend=None, picker=None, clipboard=None,
+            backend=FakeBackend(), picker=None, clipboard=None,
             runtime_dir=Path(environ["XDG_RUNTIME_DIR"]) / "qutewarden",
             cache_dir=Path(environ["XDG_CACHE_HOME"]) / "qutewarden",
             generate_password=lambda cfg: "QWSECRET-generated",
@@ -72,7 +74,7 @@ def test_registry_has_every_subcommand():
     assert sorted(all_commands()) == sorted(SUBCOMMANDS)
 
 
-@pytest.mark.parametrize("name", SUBCOMMANDS)
+@pytest.mark.parametrize("name", STUBS)
 def test_stub_subcommands_say_not_implemented(name, environ, fifo):
     assert cli.main([name], environ=environ, make_context=Recorder()) == 0
     [[command, text]] = messages(fifo)
