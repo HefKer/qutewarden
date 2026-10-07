@@ -82,13 +82,13 @@ def fill_login(ctx: Context, selection: Selection) -> None:
     js = render_fill_js(expected_origin=selection.origin, mode="auto",
                         username=item.username, password=secrets.password,
                         totp=secrets.totp, submit=ctx.config.submit_after_fill)
-    ctx.qute.message_info(f"filling {_describe(item)}")
+    ctx.qute.message_info(f"filling {describe(item)}")
     send_js(ctx.qute, js, runtime_dir=ctx.runtime_dir, timeout=ctx.fill_timeout)
     if ctx.config.insert_mode_after_fill:
         ctx.qute.enter_insert_mode()
 
 
-def _describe(item: LoginItem) -> str:
+def describe(item: LoginItem) -> str:
     return f"{item.name} ({item.username})" if item.username else item.name
 
 
