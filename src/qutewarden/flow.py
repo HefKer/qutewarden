@@ -11,7 +11,7 @@ from dataclasses import dataclass
 
 from qutewarden import match
 from qutewarden.context import Context
-from qutewarden.errors import UserCancelled
+from qutewarden.errors import QutewardenError, UserCancelled
 from qutewarden.filljs import render_fill_js
 from qutewarden.fillroute import send_js
 from qutewarden.model import LoginItem
@@ -33,15 +33,34 @@ def select_candidate(ctx: Context, *, prompt: str = "Fill") -> Selection:
     """
     page_url = ctx.qute.url or ""
     origin = match.origin_of(page_url)
-    found = match.candidates(ctx.backend.list_logins(), page_url,
-                             default_mode=ctx.config.matching_default_mode,
-                             extractor=_extractor(ctx))
+    found = find_candidates(ctx, page_url)
+    if not found:
+        raise QutewardenError(f"no Login item matches {origin}; "
+                              "use `vault` to pick from every Item")
     if len(found) == 1 and ctx.config.auto_fill:
         return Selection(page_url, origin, found[0])
     index = ctx.picker.choose(prompt, [item_line(item) for item in found])
     if index is None:
         raise UserCancelled()
     return Selection(page_url, origin, found[index])
+
+
+def find_candidates(ctx: Context, page_url: str) -> list[LoginItem]:
+    """The Candidates for the page; if there are none, sync once and look again.
+
+    May return an empty list (callers decide whether that's an error).
+    """
+    found = _candidates(ctx, page_url)
+    if not found:
+        ctx.backend.sync()
+        found = _candidates(ctx, page_url)
+    return found
+
+
+def _candidates(ctx: Context, page_url: str) -> list[LoginItem]:
+    return match.candidates(ctx.backend.list_logins(), page_url,
+                            default_mode=ctx.config.matching_default_mode,
+                            extractor=_extractor(ctx))
 
 
 def item_line(item: LoginItem) -> str:

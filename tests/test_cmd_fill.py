@@ -79,3 +79,38 @@ def test_one_candidate_without_auto_fill_still_shows_the_picker(
 def test_several_candidates_with_auto_fill_show_the_picker(fill, fake_picker):
     assert fill("--auto-fill") == 0
     assert fake_picker.lines == [["GitHub — alice", "GitHub (work) — alice-work"]]
+
+
+NEW_SITE = "https://new-site.test/login"
+NEW_ITEM = LoginItem(id="new", name="New site", username="frank",
+                     uris=(ItemUri("https://new-site.test"),))
+
+
+def test_no_candidates_syncs_once_and_tries_again(fill, fake_qutebrowser):
+    from qutewarden.backend.fake import FAKE_ITEMS
+    backend = FakeBackend(items_after_sync=[*FAKE_ITEMS, NEW_ITEM])
+    assert fill(url=NEW_SITE, backend=backend) == 0
+    assert backend.calls.count("sync") == 1
+    assert backend.calls.index("sync") < backend.calls.index("get_secrets")
+    [js] = fake_qutebrowser.js
+    assert f'"password": "{fake_password("new")}"' in js
+
+
+def test_still_no_candidates_after_sync_is_an_error_mentioning_vault(
+        fill, fake_picker, fake_qutebrowser):
+    backend = FakeBackend()
+    assert fill(url=NEW_SITE, backend=backend) == 1
+    assert backend.calls.count("sync") == 1
+    assert "get_secrets" not in backend.calls
+    assert fake_picker.lines == []
+    assert fake_qutebrowser.js == []
+    [(level, text)] = fake_qutebrowser.messages
+    assert level == "error"
+    assert "vault" in text
+    assert "new-site.test" in text
+
+
+def test_candidates_found_first_time_do_not_sync(fill):
+    backend = FakeBackend()
+    fill(backend=backend)
+    assert "sync" not in backend.calls
