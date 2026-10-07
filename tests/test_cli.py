@@ -14,7 +14,7 @@ from qutewarden.model import MatchMode
 from qutewarden.qute import Qute
 
 SUBCOMMANDS = ["fill", "totp", "generate", "vault", "unlock", "lock", "sync", "status"]
-STUBS = ["generate"]  # shrinks as tickets land
+STUBS: list[str] = []  # every subcommand is implemented; the stub test skips on an empty set
 
 
 @pytest.fixture
