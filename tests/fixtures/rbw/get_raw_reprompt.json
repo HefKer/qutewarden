@@ -1,0 +1,14 @@
+{
+  "id": "a2c4e6f8-1b3d-4f5a-9c7e-0d2f4a6b8c1e",
+  "folder": null,
+  "name": "Bank",
+  "data": {
+    "username": "alice",
+    "password": "QWSECRET-rbw-bank-password",
+    "totp": null,
+    "uris": null
+  },
+  "fields": [],
+  "notes": null,
+  "history": []
+}
