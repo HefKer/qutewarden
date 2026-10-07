@@ -46,34 +46,36 @@ Tick each box; note the qutebrowser, QtWebEngine and rbw versions at the top of 
 
 ## totp
 
-- [ ] On A's 2FA page with the code field focused: `,t` fills the current code.
+- [ ] On A's 2FA page with the code field focused: `,t` shows `qutewarden: filling TOTP for <name> (<username>)` and fills the current code.
 - [ ] Without focus: `,t` still finds the field (`autocomplete=one-time-code` or a code-like name).
-- [ ] `totp --totp-clipboard`: the code is copied, not filled; the message doesn't contain it. After `totp.clipboard_clear_seconds` (30 s) the clipboard is empty — unless you copied something else meanwhile, which must be left alone.
-- [ ] Item without TOTP: a readable error naming the Item.
+- [ ] `totp --totp-clipboard`: the code is copied, not filled; the message reads `copied TOTP for <name> (<username>); clipboard clears in 30 s` and doesn't contain the code. After `totp.clipboard_clear_seconds` (30 s) the clipboard is empty — unless you copied something else meanwhile, which must be left alone.
+- [ ] Item without TOTP: error `<name> (<username>) has no TOTP`.
+- [ ] With neither `wl-copy` nor `xclip` on `PATH`, `totp --totp-clipboard`: error `no clipboard tool found …`, and no pinentry for a Re-prompt item (checked before any secret is fetched).
 
 ## generate
 
-- [ ] Signup page of a site with **no** Item, username typed in the form: `,g` creates a Login item named after the host, with the page's origin as URI (no match mode) and the typed username; check with `rbw get --full <name>`. The new-password and confirmation fields are filled with the same password, and it equals `rbw get <name>`.
+- [ ] Signup page of a site with **no** Item, username typed in the form: `,g` runs twice (ADR-0004): the first run probes the username and spawns `generate … --username-probe <16 hex>`, the second a Login item named after the host, with the page's origin as URI (no match mode) and the typed username; check with `rbw get --full <name>`. The new-password and confirmation fields are filled with the same password, and it equals `rbw get <name>`. The message reads `saved new password, filling <host> (<username>)`.
+- [ ] Same, with a non-default flag (`generate --generator-length 32`): the second run keeps it (the saved password has 32 characters).
 - [ ] Same, but with the username field empty: the picker asks for a username.
 - [ ] Change-password page of A (one Candidate): `,g` asks "Replace password for `<username>` on `<name>`?"; Yes updates A and fills; `rbw get --full` shows the old password in A's history; A's notes are unchanged.
 - [ ] Answer No: nothing is saved or filled.
-- [ ] Two Candidates (A and B): the picker offers both and "new Item".
+- [ ] Two Candidates (A and B): the "Replace password" picker offers both and `new Item`; `new Item` behaves like the no-Item case.
 - [ ] `generate --generator-length 32 --no-generator-symbols`: the saved password has 32 characters and no symbols.
 - [ ] Save fails (e.g. network down, or `rbw lock` while the picker is open and cancel pinentry): error message, **nothing** is filled.
 
 ## vault
 
 - [ ] `,v` lists every Login item, not just Candidates.
-- [ ] Pick a Candidate: fills as `fill` does, no confirmation.
-- [ ] Pick an Item that isn't a Candidate: confirmation lists its URIs next to the page's origin; No fills nothing; Yes fills (Mismatch fill).
-- [ ] With `vault.allow_copy` off: no copy choices offered.
-- [ ] `vault --vault-allow-copy`: copy choices appear; copying a field puts it on the clipboard and clears it after `vault.copy_clear_seconds`; the message doesn't contain the value.
+- [ ] Pick a Candidate: fills as `fill` does (`filling <name> (<username>)`), no confirmation.
+- [ ] Pick an Item that isn't a Candidate (e.g. C): the confirmation `Fill <name> (<username>) on <origin>?` lists `Page: <origin>` and `Item: <uri>` lines; No fills nothing; Yes fills (Mismatch fill).
+- [ ] With `vault.allow_copy` off: picking an Item goes straight to filling; no copy choices.
+- [ ] `vault --vault-allow-copy`: after picking an Item, a second menu offers `Fill`, `Copy password`, `Copy TOTP` (Items with TOTP) and `Copy username` (Items with a username). Each copy puts the value on the clipboard, says `copied <field> for <name> (<username>); clipboard clears in 30 s` without the value, and clears it after `vault.copy_clear_seconds` unless you copied something else meanwhile. `Fill` behaves as without the flag.
 
 ## No secret in qutebrowser's log or elsewhere
 
 After running everything above:
 
-- [ ] Open `qute://log?level=vdebug` and search (Ctrl+F) for A's password, A's current and recent TOTP codes, the generated passwords, and any copied field: **no hits**. The log should show only `message-info`, `mode-enter insert` and `jseval --quiet --world=213 --file …/qutewarden/fill-….js` lines from qutewarden.
+- [ ] Open `qute://log?level=vdebug` and search (Ctrl+F) for A's password, A's current and recent TOTP codes, the generated passwords, and any copied field: **no hits**. The log should show only `message-info`/`message-error`, `mode-enter insert`, `jseval --quiet --world=213 --file …/qutewarden/fill-….js` and (from `generate`) `spawn --userscript …/qutewarden generate … --username-probe <nonce>` lines from qutewarden.
 - [ ] Also search `qute://log` for any Item notes or custom field values: no hits.
 - [ ] `:messages` (or the statusbar history) shows only Item names, usernames and origins.
 - [ ] `ls -la $XDG_RUNTIME_DIR/qutewarden/`: directory is `drwx------`, and no `fill-*.js` pipes are left behind.
