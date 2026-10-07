@@ -189,6 +189,21 @@ def test_new_password_without_autocomplete_fills_every_password_field(page):
     }
 
 
+def test_react_controlled_inputs_see_the_values(page):
+    load(page, "react_like.html")
+    # Sanity check of the emulation: a plain assignment is not seen.
+    page.evaluate("""() => {
+        const el = document.getElementById('username');
+        el.value = 'x'; el.dispatchEvent(new Event('input', {bubbles: true})); el.value = '';
+    }""")
+    assert page.evaluate("window.state.username") == ""
+
+    run_isolated(page, render_fill_js(
+        expected_origin=ORIGIN, mode="auto", username="alice", password="QWSECRET-pw",
+    ))
+    assert page.evaluate("window.state") == {"username": "alice", "password": "QWSECRET-pw"}
+
+
 @pytest.mark.parametrize("served_at", [
     "https://evil.example.test",
     "http://login.example.test",          # same host, other scheme
