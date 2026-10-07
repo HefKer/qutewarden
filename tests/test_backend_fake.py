@@ -30,6 +30,18 @@ def test_default_items_cover_the_cases_commands_need():
     assert by_id["github"].has_totp
 
 
+@pytest.mark.parametrize("page_url, expected", [
+    ("https://github.com/login", ["github", "github-alt"]),
+    ("https://example.com/", ["example"]),
+    ("https://other.test/", ["elsewhere"]),
+])
+def test_default_items_give_the_documented_candidates(tmp_path, page_url, expected):
+    from qutewarden.match import candidates, make_suffix_extractor
+    found = candidates(FAKE_ITEMS, page_url, default_mode=MatchMode.BASE_DOMAIN,
+                       extractor=make_suffix_extractor(tmp_path, offline=True))
+    assert [item.id for item in found] == expected
+
+
 def test_list_logins_returns_items_without_secrets():
     assert FakeBackend().list_logins() == list(FAKE_ITEMS)
 
