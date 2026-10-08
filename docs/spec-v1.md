@@ -71,6 +71,7 @@ Thin wrappers around the Backend. `status` shows locked/unlocked and the last sy
 ## Finding form fields (fill JavaScript)
 
 - If an input is focused, start from it and fill it and the matching fields in the same `<form>`, or in the nearest common ancestor when there's no form.
+  On a signup page, a focused text input counts as the username field only if it looks like one (`autocomplete` `username`/`email`, `type=email`, or a user/login/email-like name or id); otherwise the username field is found as if nothing were focused.
 - With no focused input, use heuristics: `autocomplete` attributes (`username`, `email`, `current-password`, `new-password`, `one-time-code`), `type=password`, then the nearest visible text, email or tel input before the password field. Hidden and disabled fields are skipped.
 - On multi-step logins, fill whichever fields are present now.
 - Set each value through the native value setter, then fire `input` and `change` (bubbling) so framework-managed forms pick it up.

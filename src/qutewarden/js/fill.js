@@ -157,8 +157,8 @@ function newPasswordFields(root) {
 }
 
 // The username field on a signup page: the focused text input if it looks
-// like a username field (not a search box or name field, #24), else the
-// username field relative to the first new-password field.
+// like a username field (#24), else the username field relative to the
+// first new-password field.
 function findSignupUsernameField(root, focused) {
   return (focused && isTextish(focused) && looksLikeUsername(focused) && focused)
     || findUsernameField(root, newPasswordFields(root)[0] || null);

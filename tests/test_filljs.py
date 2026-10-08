@@ -211,7 +211,7 @@ def add_newsletter_name_input(page):
     page.focus("#newsletter_name")
 
 
-def test_signup_ignores_a_focused_text_input_that_is_no_username_field(page):
+def test_signup_ignores_a_focused_text_input_that_is_not_a_username_field(page):
     # #24: the username goes into the real username field, not the focused one.
     load(page, "signup.html")
     add_newsletter_name_input(page)
@@ -461,7 +461,7 @@ def test_probe_writes_the_username_into_a_page_attribute(page):
     assert probe_attr(page) == "alice"
 
 
-def test_probe_ignores_a_focused_text_input_that_is_no_username_field(page):
+def test_probe_ignores_a_focused_text_input_that_is_not_a_username_field(page):
     load(page, "signup.html")
     page.fill("#username", "alice")
     add_newsletter_name_input(page)
