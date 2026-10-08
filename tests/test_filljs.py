@@ -200,6 +200,43 @@ def test_signup_fills_the_username_into_the_focused_text_input(page):
     }
 
 
+def add_newsletter_name_input(page):
+    """An unrelated text input inside the signup form, focused."""
+    page.evaluate("""() => {
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.name = input.id = 'newsletter_name';
+        document.getElementById('signup').prepend(input);
+    }""")
+    page.focus("#newsletter_name")
+
+
+def test_signup_ignores_a_focused_text_input_that_is_no_username_field(page):
+    # #24: the username goes into the real username field, not the focused one.
+    load(page, "signup.html")
+    add_newsletter_name_input(page)
+    run_isolated(page, render_fill_js(
+        expected_origin=ORIGIN, mode="new_password", username="alice",
+        password="QWSECRET-generated",
+    ))
+    assert values(page, "newsletter_name", "username", "password") == {
+        "newsletter_name": "", "username": "alice", "password": "QWSECRET-generated",
+    }
+
+
+def test_signup_without_form_ignores_a_focused_unrelated_text_input(page):
+    load(page, "signup_no_form.html")
+    page.focus("#q")
+    run_isolated(page, render_fill_js(
+        expected_origin=ORIGIN, mode="new_password", username="alice",
+        password="QWSECRET-generated",
+    ))
+    assert values(page, "q", "username", "password", "confirm") == {
+        "q": "", "username": "alice", "password": "QWSECRET-generated",
+        "confirm": "QWSECRET-generated",
+    }
+
+
 def test_signup_without_a_username_field_fills_only_the_passwords(page):
     load(page, "signup.html")
     page.evaluate("""() => {
@@ -420,6 +457,15 @@ def test_probe_writes_the_username_into_a_page_attribute(page):
     load(page, "signup.html")
     page.fill("#username", "alice")
     page.fill("#password", "typed-password")
+    run_isolated(page, render_probe_js(expected_origin=ORIGIN, nonce="0123abcd"))
+    assert probe_attr(page) == "alice"
+
+
+def test_probe_ignores_a_focused_text_input_that_is_no_username_field(page):
+    load(page, "signup.html")
+    page.fill("#username", "alice")
+    add_newsletter_name_input(page)
+    page.fill("#newsletter_name", "Alice Liddell")
     run_isolated(page, render_probe_js(expected_origin=ORIGIN, nonce="0123abcd"))
     assert probe_attr(page) == "alice"
 
