@@ -156,12 +156,28 @@ function newPasswordFields(root) {
   return marked.length ? marked : passwords;
 }
 
-// Only the new-password fields (spec, `generate` step 3); never the username.
-function fillNewPassword(root, a) {
+// The username field on a signup page: the focused text input, else the
+// username field relative to the first new-password field.
+function findSignupUsernameField(root, focused) {
+  return (focused && isTextish(focused) && focused)
+    || findUsernameField(root, newPasswordFields(root)[0] || null);
+}
+
+// The new-password fields (spec, `generate` step 3), plus the username field
+// if `a.username` is given and that field is still empty (#16).
+function fillNewPassword(root, a, focused) {
   if (a.password == null) return [];
+  const filled = [];
+  if (a.username != null) {
+    const field = findSignupUsernameField(root, focused);
+    if (field && field.value === "") {
+      setValue(field, a.username);
+      filled.push(field);
+    }
+  }
   const targets = newPasswordFields(root);
   for (const el of targets) setValue(el, a.password);
-  return targets;
+  return [...filled, ...targets];
 }
 
 // Page-kind decision for `auto` (Python can't get a reply from the page):
@@ -233,8 +249,7 @@ function probeAttribute(nonce) {
 // Secret-free: copy the username the user typed on a signup page into an
 // attribute that qutebrowser's DOM dump (QUTE_HTML) carries back to Python.
 function probeUsername(root, focused, nonce) {
-  const field = (focused && isTextish(focused) && focused)
-    || findUsernameField(root, newPasswordFields(root)[0] || null);
+  const field = findSignupUsernameField(root, focused);
   document.documentElement.setAttribute(probeAttribute(nonce), field ? field.value : "");
 }
 
@@ -252,7 +267,7 @@ function qutewardenFill(a) {
     case "auto": filled = fillAuto(root, a, focused); break;
     case "login": filled = fillLogin(root, a, focused); break;
     case "otp": filled = fillOtp(root, a, focused); break;
-    case "new_password": filled = fillNewPassword(root, a); break;
+    case "new_password": filled = fillNewPassword(root, a, focused); break;
   }
   if (a.submit && filled.length) submitAfter(filled);
 }
