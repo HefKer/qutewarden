@@ -18,9 +18,11 @@ from qutewarden.errors import QutewardenError
 
 _DASH_P = frozenset({"rofi", "dmenu", "wofi", "bemenu"})
 
-# fuzzel's --width is in characters and defaults to 30. The cap keeps one huge
-# line from asking for a window wider than any screen.
-_FUZZEL_DEFAULT_WIDTH = 30
+# fuzzel's --width is in characters. We always pass one, so a small width in
+# fuzzel.ini can't cut a line off; the floor keeps short confirmations from
+# looking cramped, and the cap keeps one huge line from asking for a window
+# wider than any screen.
+_FUZZEL_MIN_WIDTH = 60
 _FUZZEL_MAX_WIDTH = 160
 
 
@@ -97,16 +99,14 @@ def _prompt_args(program: str, prompt: str) -> list[str]:
 def _fuzzel_width_args(argv: Sequence[str], shown: Sequence[str]) -> list[str]:
     """fuzzel's --width to fit every line ``shown`` (prompt included), so none is cut off.
 
-    Nothing for other programs, if the user's argv already sets a width, or if
-    fuzzel's default width is enough.
+    At least _FUZZEL_MIN_WIDTH, at most _FUZZEL_MAX_WIDTH. Nothing for other
+    programs, or if the user's argv already sets a width.
     """
     if os.path.basename(argv[0]) != "fuzzel" or any(
             a == "--width" or a.startswith(("-w", "--width=")) for a in argv[1:]):
         return []
     needed = max(_columns(line) for line in shown)
-    if needed <= _FUZZEL_DEFAULT_WIDTH:
-        return []
-    return [f"--width={min(needed, _FUZZEL_MAX_WIDTH)}"]
+    return [f"--width={min(max(needed, _FUZZEL_MIN_WIDTH), _FUZZEL_MAX_WIDTH)}"]
 
 
 def _columns(text: str) -> int:
