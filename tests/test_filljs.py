@@ -164,16 +164,57 @@ def test_login_page_in_auto_mode_does_not_get_the_totp_code(page):
 
 
 def test_signup_fills_only_new_password_and_confirmation(page):
-    # Spec `generate` step 3: only new-password fields, never an empty username.
+    # Spec `generate` step 3: without a username, only the new-password fields.
+    load(page, "signup.html")
+    run_isolated(page, render_fill_js(
+        expected_origin=ORIGIN, mode="new_password", password="QWSECRET-generated",
+    ))
+    assert values(page, "username", "email", "password", "confirm", "hidden-password") == {
+        "username": "", "email": "", "password": "QWSECRET-generated",
+        "confirm": "QWSECRET-generated", "hidden-password": "",
+    }
+
+
+def test_signup_fills_a_username_into_an_empty_username_field(page):
+    # #16: a username asked for in the picker also goes into the page.
     load(page, "signup.html")
     run_isolated(page, render_fill_js(
         expected_origin=ORIGIN, mode="new_password", username="alice",
         password="QWSECRET-generated",
     ))
     assert values(page, "username", "email", "password", "confirm", "hidden-password") == {
-        "username": "", "email": "", "password": "QWSECRET-generated",
+        "username": "alice", "email": "", "password": "QWSECRET-generated",
         "confirm": "QWSECRET-generated", "hidden-password": "",
     }
+
+
+def test_signup_fills_the_username_into_the_focused_text_input(page):
+    load(page, "signup.html")
+    page.focus("#email")
+    run_isolated(page, render_fill_js(
+        expected_origin=ORIGIN, mode="new_password", username="alice",
+        password="QWSECRET-generated",
+    ))
+    assert values(page, "username", "email", "password") == {
+        "username": "", "email": "alice", "password": "QWSECRET-generated",
+    }
+
+
+def test_signup_without_a_username_field_fills_only_the_passwords(page):
+    load(page, "signup.html")
+    page.evaluate("""() => {
+        for (const id of ['username', 'email']) document.getElementById(id).remove();
+    }""")
+    run_isolated(page, render_fill_js(
+        expected_origin=ORIGIN, mode="new_password", username="alice",
+        password="QWSECRET-generated",
+    ))
+    assert values(page, "password", "confirm") == {
+        "password": "QWSECRET-generated", "confirm": "QWSECRET-generated",
+    }
+    assert page.evaluate(
+        "() => Array.from(document.querySelectorAll('input')).every("
+        "el => el.type === 'password' || el.value === '')")
 
 
 def test_signup_keeps_a_username_the_user_typed(page):
@@ -186,6 +227,23 @@ def test_signup_keeps_a_username_the_user_typed(page):
     assert values(page, "username", "password") == {
         "username": "typed-by-user", "password": "QWSECRET-generated",
     }
+
+
+def test_signup_without_password_fields_fills_and_submits_nothing(page):
+    load(page, "signup.html")
+    page.evaluate("""() => {
+        for (const el of document.querySelectorAll('input[type=password]')) el.remove();
+        document.getElementById('signup').addEventListener('submit', (e) => {
+            e.preventDefault();
+            document.body.dataset.submitted = 'yes';
+        });
+    }""")
+    run_isolated(page, render_fill_js(
+        expected_origin=ORIGIN, mode="new_password", username="alice",
+        password="QWSECRET-generated", submit=True,
+    ))
+    assert values(page, "username") == {"username": ""}
+    assert page.evaluate("() => document.body.dataset.submitted") is None
 
 
 def test_new_password_without_autocomplete_fills_every_password_field(page):
