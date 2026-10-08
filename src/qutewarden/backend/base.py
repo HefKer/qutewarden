@@ -36,7 +36,7 @@ class NotLoggedIn(BackendError):
 
 
 class UnlockFailed(BackendError):
-    """Wrong master password, or the password prompt was cancelled."""
+    """Wrong master password, or the password prompt was cancelled or can't be shown."""
 
 
 class ItemNotFound(BackendError):

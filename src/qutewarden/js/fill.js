@@ -156,12 +156,29 @@ function newPasswordFields(root) {
   return marked.length ? marked : passwords;
 }
 
-// Only the new-password fields (spec, `generate` step 3); never the username.
-function fillNewPassword(root, a) {
-  if (a.password == null) return [];
+// The username field on a signup page: the focused text input, else the
+// username field relative to the first new-password field.
+function findSignupUsernameField(root, focused) {
+  return (focused && isTextish(focused) && focused)
+    || findUsernameField(root, newPasswordFields(root)[0] || null);
+}
+
+// The new-password fields (spec, `generate` step 3), plus the username field
+// if `a.username` is given and that field is still empty (#16). Without a
+// new-password field nothing is filled, so nothing is submitted either.
+function fillNewPassword(root, a, focused) {
   const targets = newPasswordFields(root);
+  if (a.password == null || !targets.length) return [];
+  const filled = [];
+  if (a.username != null) {
+    const field = findSignupUsernameField(root, focused);
+    if (field && field.value === "") {
+      setValue(field, a.username);
+      filled.push(field);
+    }
+  }
   for (const el of targets) setValue(el, a.password);
-  return targets;
+  return [...filled, ...targets];
 }
 
 // Page-kind decision for `auto` (Python can't get a reply from the page):
@@ -216,10 +233,22 @@ function findSubmitButton(filled) {
   return null;
 }
 
+// The form's default button: its first submit button in tree order,
+// including ones outside it linked with form=. form.elements would miss
+// input[type=image], so walk the form's tree instead. Unlike EXPLICIT_SUBMIT,
+// el.type also counts a <button> with no or an invalid type. Null if disabled
+// (also by a disabled <fieldset>), so the form is submitted without a submitter.
+function defaultButton(form) {
+  const button = Array.from(form.getRootNode().querySelectorAll("button, input"))
+    .find((el) => el.form === form && (el.type === "submit" || el.type === "image"));
+  return button && !button.matches(":disabled") ? button : null;
+}
+
 function submitAfter(filled) {
   const field = filled[filled.length - 1];
   if (field.form) {
-    field.form.requestSubmit();
+    // With a submitter, its name/value is sent, like pressing Enter would.
+    field.form.requestSubmit(defaultButton(field.form));
     return;
   }
   const button = findSubmitButton(filled);
@@ -233,8 +262,7 @@ function probeAttribute(nonce) {
 // Secret-free: copy the username the user typed on a signup page into an
 // attribute that qutebrowser's DOM dump (QUTE_HTML) carries back to Python.
 function probeUsername(root, focused, nonce) {
-  const field = (focused && isTextish(focused) && focused)
-    || findUsernameField(root, newPasswordFields(root)[0] || null);
+  const field = findSignupUsernameField(root, focused);
   document.documentElement.setAttribute(probeAttribute(nonce), field ? field.value : "");
 }
 
@@ -252,7 +280,7 @@ function qutewardenFill(a) {
     case "auto": filled = fillAuto(root, a, focused); break;
     case "login": filled = fillLogin(root, a, focused); break;
     case "otp": filled = fillOtp(root, a, focused); break;
-    case "new_password": filled = fillNewPassword(root, a); break;
+    case "new_password": filled = fillNewPassword(root, a, focused); break;
   }
   if (a.submit && filled.length) submitAfter(filled);
 }

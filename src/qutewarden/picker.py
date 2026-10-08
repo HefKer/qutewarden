@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import unicodedata
 from collections.abc import Mapping, Sequence
 from typing import Protocol
 
@@ -16,6 +17,11 @@ from qutewarden import proc
 from qutewarden.errors import QutewardenError
 
 _DASH_P = frozenset({"rofi", "dmenu", "wofi", "bemenu"})
+
+# fuzzel's --width is in characters and defaults to 30. The cap keeps one huge
+# line from asking for a window wider than any screen.
+_FUZZEL_DEFAULT_WIDTH = 30
+_FUZZEL_MAX_WIDTH = 160
 
 
 class Picker(Protocol):
@@ -57,12 +63,14 @@ class DmenuPicker:
         return self._run(prompt, [])
 
     def confirm(self, prompt: str, details: Sequence[str] = ()) -> bool:
-        lines = [_one_line(d) for d in details]
-        return self._run(prompt, [*lines, "Yes", "No"]) == "Yes"
+        lines = [*(_one_line(d) for d in details), "Yes", "No"]
+        width = _fuzzel_width_args(self.argv, [f"{prompt}: ", *lines])
+        return self._run(prompt, lines, width) == "Yes"
 
-    def _run(self, prompt: str, lines: Sequence[str]) -> str | None:
+    def _run(self, prompt: str, lines: Sequence[str],
+             extra_args: Sequence[str] = ()) -> str | None:
         """Show ``lines``; return the answer without its newline, or None if cancelled."""
-        argv = [*self.argv, *_prompt_args(self.argv[0], prompt)]
+        argv = [*self.argv, *_prompt_args(self.argv[0], prompt), *extra_args]
         stdin = "".join(line + "\n" for line in lines)
         try:
             result = proc.run(argv, input=stdin, check=False)
@@ -84,6 +92,26 @@ def _prompt_args(program: str, prompt: str) -> list[str]:
     if name in _DASH_P:
         return ["-p", prompt]
     return []
+
+
+def _fuzzel_width_args(argv: Sequence[str], shown: Sequence[str]) -> list[str]:
+    """fuzzel's --width to fit every line ``shown`` (prompt included), so none is cut off.
+
+    Nothing for other programs, if the user's argv already sets a width, or if
+    fuzzel's default width is enough.
+    """
+    if os.path.basename(argv[0]) != "fuzzel" or any(
+            a == "--width" or a.startswith(("-w", "--width=")) for a in argv[1:]):
+        return []
+    needed = max(_columns(line) for line in shown)
+    if needed <= _FUZZEL_DEFAULT_WIDTH:
+        return []
+    return [f"--width={min(needed, _FUZZEL_MAX_WIDTH)}"]
+
+
+def _columns(text: str) -> int:
+    """Terminal-style display width: wide (CJK, emoji) characters take two columns."""
+    return sum(2 if unicodedata.east_asian_width(c) in "WF" else 1 for c in text)
 
 
 def _one_line(text: str) -> str:

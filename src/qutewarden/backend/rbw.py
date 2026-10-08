@@ -38,6 +38,14 @@ from qutewarden.totp import totp_code
 MIN_VERSION = (1, 15)
 _NOT_LOGGED_IN_STDERR = "failed to find email address in config"
 _LOGIN_HINT = "run `rbw config set email <address>` and `rbw login`"
+# The server rejected rbw's refresh token; rbw then fails to parse the reply.
+_EXPIRED_LOGIN_STDERR = "missing field `access_token`"
+_RELOGIN_HINT = "run `rbw login` (`rbw purge` first if that fails)"
+# Userscripts have no terminal, so a curses/tty pinentry fails with ENOTTY.
+_NO_TTY_STDERR = "Inappropriate ioctl for device"
+_PINENTRY_HINT = ("rbw's pinentry must be graphical: run `rbw config set pinentry pinentry-qt` "
+                  "(or pinentry-gnome3, pinentry-bemenu, pinentry-rofi, ...), "
+                  "then `rbw stop-agent`")
 _SYNC_HINT = "run `rbw sync`"
 
 # rbw's UriMatchType (serde_repr u8) -> MatchMode
@@ -178,8 +186,9 @@ class RbwBackend(Backend):
 
     @staticmethod
     def _error(result, cls: type[BackendError], fallback: str) -> BackendError:
-        if _NOT_LOGGED_IN_STDERR in result.stderr:
-            return NotLoggedIn("rbw isn't logged in", hint=_LOGIN_HINT)
+        known = _known_error(result.stderr)
+        if known is not None:
+            return known
         lines = result.stderr.strip().splitlines()
         return cls(lines[0] if lines else fallback)
 
@@ -187,8 +196,9 @@ class RbwBackend(Backend):
         """One ``rbw get --raw``. Its stdout and stderr are never put in errors."""
         result = self._run(["get", "--raw", "--", item_id])
         if result.returncode != 0:
-            if _NOT_LOGGED_IN_STDERR in result.stderr:
-                raise NotLoggedIn("rbw isn't logged in", hint=_LOGIN_HINT)
+            known = _known_error(result.stderr)
+            if known is not None:
+                raise known
             if "no entry found" in result.stderr or "couldn't find entry" in result.stderr:
                 raise ItemNotFound("rbw has no item with that id", hint=_SYNC_HINT)
             raise BackendError("rbw get failed")
@@ -239,6 +249,17 @@ class RbwBackend(Backend):
                                 for u in login.get("uris") or []],
             }
         return db
+
+
+def _known_error(stderr: str) -> BackendError | None:
+    """rbw failures with a fixed message and a fix; never includes ``stderr`` itself."""
+    if _NOT_LOGGED_IN_STDERR in stderr:
+        return NotLoggedIn("rbw isn't logged in", hint=_LOGIN_HINT)
+    if _EXPIRED_LOGIN_STDERR in stderr:
+        return NotLoggedIn("rbw's login has expired", hint=_RELOGIN_HINT)
+    if _NO_TTY_STDERR in stderr and "pinentry" in stderr.lower():
+        return UnlockFailed("rbw's pinentry needs a terminal", hint=_PINENTRY_HINT)
+    return None
 
 
 def _match_mode(match_type: object) -> MatchMode | None:

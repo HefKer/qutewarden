@@ -256,6 +256,23 @@ def test_without_a_username_on_the_page_the_picker_asks_for_one(generate, tmp_pa
     assert backend.created[0]["username"] == "grace"
 
 
+def test_a_username_from_the_picker_is_also_filled_into_the_page(
+        generate, fake_qutebrowser, tmp_path):
+    # #16: the fill script sets it on the page's username field if that's empty.
+    generate(*STAGE2, url=NEW_SITE, picker=FakePicker(text="grace"),
+             environ=_dump(tmp_path, "<html></html>"))
+    [js] = fake_qutebrowser.js
+    assert '"mode": "new_password"' in js
+    assert '"username": "grace"' in js
+
+
+def test_an_empty_picker_answer_fills_no_username(generate, fake_qutebrowser, tmp_path):
+    generate(*STAGE2, url=NEW_SITE, picker=FakePicker(text=""),
+             environ=_dump(tmp_path, "<html></html>"))
+    [js] = fake_qutebrowser.js
+    assert '"username": null' in js
+
+
 def test_a_missing_dump_also_asks_for_the_username(generate):
     backend = FakeBackend()
     picker = FakePicker(text="grace")

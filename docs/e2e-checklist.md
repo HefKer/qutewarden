@@ -10,6 +10,7 @@ Tick each box; note the qutebrowser, QtWebEngine and rbw versions at the top of 
 - [ ] Link it where qutebrowser looks (`spawn --userscript` doesn't search `PATH`): `ln -sf "$PWD/result/bin/qutewarden" ~/.local/share/qutebrowser/userscripts/qutewarden`.
 - [ ] Add the key bindings from the README (`,p` fill, `,t` totp, `,g` generate, `,v` vault, `,u` unlock, `,l` lock, `,s` sync, `,S` status) and `:config-source`.
 - [ ] `rbw --version` is ≥ 1.15 and `rbw login` has been done.
+- [ ] `rbw config show` has a graphical `pinentry` (e.g. `pinentry-qt`, `pinentry-gnome3`, `pinentry-bemenu`, `pinentry-rofi`), because qutebrowser userscripts have no terminal. After changing it, run `rbw stop-agent`.
 - [ ] Use a **test vault or test Items** only. Create:
   - **A**: Login item for a site you can log in to (e.g. a throwaway account), URI with no match mode, with a TOTP secret. Note its password, username and current TOTP code: you'll search the log for them.
   - **B**: a second Login item with a URI on the same base domain as A (two Candidates).
@@ -67,7 +68,7 @@ Tick each box; note the qutebrowser, QtWebEngine and rbw versions at the top of 
 
 - [ ] `,v` lists every Login item, not just Candidates.
 - [ ] Pick a Candidate: fills as `fill` does (`filling <name> (<username>)`), no confirmation.
-- [ ] Pick an Item that isn't a Candidate (e.g. C): the confirmation `Fill <name> (<username>) on <origin>?` lists `Page: <origin>` and `Item: <uri>` lines; No fills nothing; Yes fills (Mismatch fill).
+- [ ] Pick an Item that isn't a Candidate (e.g. C): the confirmation `Fill <name> (<username>)?` lists `Page: <host>` (no `https://`) and one `Item: <host> <path>` line per URI (a `regular_expression` URI or one that isn't a URL shown verbatim); with fuzzel the window is wide enough that no line is cut off, e.g. for an Item URI `https://www.365chess.com.evil.example/signup.php`; No fills nothing; Yes fills (Mismatch fill).
 - [ ] With `vault.allow_copy` off: picking an Item goes straight to filling; no copy choices.
 - [ ] `vault --vault-allow-copy`: after picking an Item, a second menu offers `Fill`, `Copy password`, `Copy TOTP` (Items with TOTP) and `Copy username` (Items with a username). Each copy puts the value on the clipboard, says `copied <field> for <name> (<username>); clipboard clears in 30 s` without the value, and clears it after `vault.copy_clear_seconds` unless you copied something else meanwhile. `Fill` behaves as without the flag.
 

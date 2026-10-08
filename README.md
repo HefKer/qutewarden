@@ -38,6 +38,7 @@ Each Item in the picker is shown as `<name> — <username>`. With no matching It
 - qutebrowser ≥ 3.0 (QtWebEngine)
 - Python ≥ 3.11
 - [`rbw`](https://github.com/doy/rbw) ≥ 1.15, logged in (`rbw login`). 1.15 is the first version that lists Item URIs without decrypting them ([ADR-0003](docs/adr/0003-rbw-1-15-and-match-types-from-its-db.md)).
+- A graphical pinentry for `rbw`, because qutebrowser userscripts have no terminal: `rbw config set pinentry pinentry-qt` (or `pinentry-gnome3`, `pinentry-bemenu`, `pinentry-rofi`, …), then `rbw stop-agent`. A terminal-only pinentry fails with `rbw's pinentry needs a terminal`.
 - A dmenu-compatible picker. By default `fuzzel --dmenu` on Wayland and `rofi -dmenu` on X11; set `picker` to use another one.
 - Only for the clipboard opt-ins: `wl-copy`/`wl-paste` (wl-clipboard) on Wayland, `xclip` on X11
 
@@ -144,7 +145,7 @@ copy_clear_seconds = 30
 | `vault.allow_copy` | `--vault-allow-copy` / `--no-vault-allow-copy` |
 | `vault.copy_clear_seconds` | `--vault-copy-clear-seconds N` |
 
-The auto-lock timeout and the master password prompt (pinentry) are `rbw`'s: see `rbw config`.
+The auto-lock timeout and the master password prompt (pinentry) are `rbw`'s: see `rbw config`. The pinentry must be graphical, because qutebrowser userscripts have no terminal (see [Requirements](#requirements)).
 
 ## Security
 
