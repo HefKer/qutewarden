@@ -177,8 +177,8 @@ def test_unlock_with_terminal_only_pinentry_asks_for_a_graphical_one(rbw):
     with pytest.raises(UnlockFailed) as excinfo:
         rbw.backend().unlock()
     assert "Inappropriate ioctl" not in str(excinfo.value)
-    assert "rbw config set pinentry pinentry-qt" in excinfo.value.hint
-    assert "rbw stop-agent" in excinfo.value.hint
+    assert "rbw config set pinentry pinentry-qt" in (excinfo.value.hint or "")
+    assert "rbw stop-agent" in (excinfo.value.hint or "")
 
 
 def test_cancelled_pinentry_keeps_rbw_stderr_and_has_no_hint(rbw):
@@ -202,8 +202,8 @@ def test_sync_with_rejected_refresh_token_asks_to_log_in_again(rbw):
     with pytest.raises(NotLoggedIn) as excinfo:
         rbw.backend().sync()
     assert "access_token" not in str(excinfo.value)
-    assert "rbw login" in excinfo.value.hint
-    assert "rbw purge" in excinfo.value.hint
+    assert "rbw login" in (excinfo.value.hint or "")
+    assert "rbw purge" in (excinfo.value.hint or "")
 
 
 def test_status_reports_unlocked_and_db_mtime_as_last_sync(rbw):
@@ -337,7 +337,7 @@ def test_get_secrets_with_terminal_only_pinentry_asks_for_a_graphical_one(rbw):
                 stderr=stderr, rc=1)
     with pytest.raises(UnlockFailed) as excinfo:
         rbw.backend().get_secrets(BANK_ID)
-    assert "rbw config set pinentry pinentry-qt" in excinfo.value.hint
+    assert "rbw config set pinentry pinentry-qt" in (excinfo.value.hint or "")
     assert SECRET_MARKER not in str(excinfo.value)
     assert "Inappropriate ioctl" not in str(excinfo.value)
 
@@ -348,7 +348,7 @@ def test_get_secrets_with_rejected_refresh_token_asks_to_log_in_again(rbw):
                 stderr=stderr, rc=1)
     with pytest.raises(NotLoggedIn) as excinfo:
         rbw.backend().get_secrets(BANK_ID)
-    assert "rbw purge" in excinfo.value.hint
+    assert "rbw purge" in (excinfo.value.hint or "")
     assert SECRET_MARKER not in str(excinfo.value)
 
 

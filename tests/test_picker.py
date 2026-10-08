@@ -123,26 +123,32 @@ def _width(argv: list[str]) -> int | None:
     return widths[0] if widths else None
 
 
+def _set_width(argv: list[str]) -> int:
+    width = _width(argv)
+    assert width is not None, "no --width passed"
+    return width
+
+
 def test_confirm_widens_fuzzel_to_fit_the_longest_line(fuzzel):
     DmenuPicker([str(fuzzel.path), "--dmenu"]).confirm("Fill X (x)?", ["Page: a.test", LONG])
-    assert _width(fuzzel.calls[0]["argv"]) >= len(LONG)
+    assert _set_width(fuzzel.calls[0]["argv"]) >= len(LONG)
 
 
 def test_confirm_widens_fuzzel_to_fit_a_long_prompt(fuzzel):
     prompt = "Fill A rather long Item name (someone@example.com)?"
     DmenuPicker([str(fuzzel.path), "--dmenu"]).confirm(prompt, ["Page: a.test"])
-    assert _width(fuzzel.calls[0]["argv"]) >= len(f"{prompt}: ")
+    assert _set_width(fuzzel.calls[0]["argv"]) >= len(f"{prompt}: ")
 
 
 def test_confirm_counts_wide_characters_as_two_columns(fuzzel):
     prompt = "Fill " + "日本語" * 10 + "?"
     DmenuPicker([str(fuzzel.path), "--dmenu"]).confirm(prompt, ["Page: a.test"])
-    assert _width(fuzzel.calls[0]["argv"]) >= len(f"{prompt}: ") + 30
+    assert _set_width(fuzzel.calls[0]["argv"]) >= len(f"{prompt}: ") + 30
 
 
 def test_confirm_caps_the_fuzzel_width(fuzzel):
     DmenuPicker([str(fuzzel.path), "--dmenu"]).confirm("Fill?", ["Item: " + "a" * 1000])
-    assert 80 <= _width(fuzzel.calls[0]["argv"]) < 1000
+    assert 80 <= _set_width(fuzzel.calls[0]["argv"]) < 1000
 
 
 def test_confirm_leaves_fuzzels_default_width_for_short_lines(fuzzel):

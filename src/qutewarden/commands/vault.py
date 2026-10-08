@@ -85,8 +85,9 @@ def _copy(ctx: Context, item: LoginItem, field: Field) -> None:
 def _confirm_mismatch(ctx: Context, item: LoginItem, origin: str) -> bool:
     """Ask before a Mismatch fill, showing the Item's URIs next to the page's origin.
 
-    Both are shown host first, without ``https://``. Hosts come first so a look-alike (``www.365chess.com.evil.example``) can't
-    hide past the picker's right edge. Lines are never shortened.
+    Both are shown host first, without ``https://``. Hosts come first so a look-alike
+    (``www.365chess.com.evil.example``) can't hide past the picker's right edge. Lines are
+    never shortened.
     """
     uris = [f"Item: {_uri_text(ctx, u)}" for u in item.uris] or ["Item: (no URIs)"]
     return ctx.picker.confirm(f"Fill {flow.describe(item)}?",
