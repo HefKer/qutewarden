@@ -97,7 +97,7 @@ def _prompt_args(program: str, prompt: str) -> list[str]:
 
 
 def _fuzzel_width_args(argv: Sequence[str], shown: Sequence[str]) -> list[str]:
-    """fuzzel's --width to fit every line ``shown`` (prompt included), so none is cut off.
+    """fuzzel's --width, wide enough that no line ``shown`` (prompt included) is cut off.
 
     At least _FUZZEL_MIN_WIDTH, at most _FUZZEL_MAX_WIDTH. Nothing for other
     programs, or if the user's argv already sets a width.
