@@ -9,13 +9,14 @@ copying a single field instead (Security rule 4).
 from __future__ import annotations
 
 import argparse
+import re
 from enum import Enum
 
 from qutewarden import flow, match
 from qutewarden.commands import register
 from qutewarden.context import Context
 from qutewarden.errors import QutewardenError, UserCancelled
-from qutewarden.model import LoginItem
+from qutewarden.model import ItemUri, LoginItem, MatchMode
 
 
 class Field(Enum):
@@ -27,6 +28,9 @@ class Field(Enum):
 
 
 FILL = "Fill"
+
+# scheme://authority, then the rest (path, query, fragment) verbatim.
+_URL = re.compile(r"(?P<head>[^:/?#]+://(?P<authority>[^/?#]*))(?P<rest>.*)", re.DOTALL)
 
 
 @register("vault", help="Pick any Login item; Mismatch fill after confirmation")
@@ -79,7 +83,32 @@ def _copy(ctx: Context, item: LoginItem, field: Field) -> None:
 
 
 def _confirm_mismatch(ctx: Context, item: LoginItem, origin: str) -> bool:
-    """Ask before a Mismatch fill, showing the Item's URIs next to the page's origin."""
-    uris = [f"Item: {u.uri}" for u in item.uris] or ["Item: (no URIs)"]
-    return ctx.picker.confirm(f"Fill {flow.describe(item)} on {origin}?",
-                              [f"Page: {origin}", *uris])
+    """Ask before a Mismatch fill, showing the Item's URIs next to the page's origin.
+
+    Hosts come first so a look-alike (``www.365chess.com.evil.example``) can't
+    hide past the picker's right edge. Lines are never shortened.
+    """
+    uris = [f"Item: {_uri_text(ctx, u)}" for u in item.uris] or ["Item: (no URIs)"]
+    return ctx.picker.confirm(f"Fill {flow.describe(item)}?",
+                              [f"Page: {origin.removeprefix('https://')}", *uris])
+
+
+def _uri_text(ctx: Context, item_uri: ItemUri) -> str:
+    """``[scheme://]host[:port] rest``, or the URI verbatim if that could mislead.
+
+    Only an http(s) URL with a plain authority (no userinfo, backslash or
+    whitespace) is shown host first; a regular expression or anything else
+    is shown as is.
+    """
+    mode = item_uri.mode or ctx.config.matching_default_mode
+    url = _URL.fullmatch(item_uri.uri.strip())
+    if mode is MatchMode.REGULAR_EXPRESSION or url is None:
+        return item_uri.uri
+    authority = url["authority"]
+    if not authority or any(c in "@\\" or c.isspace() for c in authority):
+        return item_uri.uri
+    try:
+        host = match.origin_of(url["head"]).removeprefix("https://")
+    except QutewardenError:
+        return item_uri.uri
+    return f"{host} {url['rest']}" if url["rest"] else host
