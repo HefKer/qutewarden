@@ -26,6 +26,8 @@ markers = ["browser: needs playwright + chromium (deselect with -m 'not browser'
 [tool.ruff]
 target-version = "py311"
 line-length = 100
+# Throwaway spike scripts; the e2e harness ticket deletes them (docs/spec-v2.md).
+extend-exclude = ["docs/e2e-spike"]
 
 [tool.ruff.lint]
 extend-select = ["E501"]

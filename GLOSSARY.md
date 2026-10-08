@@ -16,9 +16,25 @@ _Avoid_: Entry, cipher, credential, password (when meaning the whole record)
 An Item of type Login: a username, a password, an optional TOTP secret, and a list of URIs.
 _Avoid_: Account, site, login (bare)
 
+**Card item**:
+An Item of type Card: cardholder name, brand, number, expiry and security code. It has no URIs, so it is never a Candidate.
+_Avoid_: Payment method, credit card (when meaning the Item)
+
+**Identity item**:
+An Item of type Identity: a person's name, address, email, phone and similar details. It has no URIs, so it is never a Candidate.
+_Avoid_: Profile, address, contact
+
+**Custom field**:
+A named extra value on an Item, of kind text, hidden, boolean or linked. A linked custom field stands for one of the Item's own built-in values, such as its username or password, under another name.
+_Avoid_: Extra field, attribute
+
 **URI match**:
 The rule that decides whether a Login item applies to a page, taken from one of the item's URIs and its match mode (base domain, host, starts-with, exact, regular expression, never). Items are matched on URI match only, never on their name.
 _Avoid_: Name matching, domain lookup
+
+**Equivalent domains**:
+A group of base domains treated as one site for URI match, so an Item for one of them is a Candidate on the others. Only the base-domain match mode uses them. Bitwarden's global groups apply unless turned off, and the user can add their own.
+_Avoid_: Domain aliases, related sites, linked domains
 
 **Candidate**:
 A Login item whose URI match applies to the current page, so it can be filled there.

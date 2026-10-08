@@ -1,0 +1,9 @@
+#!/bin/sh
+echo "OK fake pinentry"
+while IFS= read -r line; do
+  case "$line" in
+    GETPIN*) printf 'D %s\nOK\n' "${FAKE_PIN:-dummy-master-pw}" ;;
+    BYE*) echo OK; exit 0 ;;
+    *) echo OK ;;
+  esac
+done
