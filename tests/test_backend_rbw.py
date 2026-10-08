@@ -162,6 +162,46 @@ def test_sync_failure_is_backend_error(rbw):
         rbw.backend().sync()
 
 
+NO_TTY_PINENTRY_STDERR = ("rbw unlock: failed to read password from pinentry: pinentry error: "
+                          "Inappropriate ioctl for device <Pinentry>\n")
+EXPIRED_LOGIN_STDERR = ("rbw sync: failed to sync database from server: failed to parse JSON: "
+                        "missing field `access_token` at line 1 column 120\n")
+
+
+def test_unlock_with_terminal_only_pinentry_asks_for_a_graphical_one(rbw):
+    rbw.respond(["unlock"], stderr=NO_TTY_PINENTRY_STDERR, rc=1)
+    with pytest.raises(UnlockFailed) as excinfo:
+        rbw.backend().unlock()
+    assert "Inappropriate ioctl" not in str(excinfo.value)
+    assert "rbw config set pinentry pinentry-qt" in excinfo.value.hint
+    assert "rbw stop-agent" in excinfo.value.hint
+
+
+def test_cancelled_pinentry_keeps_rbw_stderr_and_has_no_hint(rbw):
+    rbw.respond(["unlock"], stderr="rbw unlock: failed to read password from pinentry: "
+                                   "pinentry error: Operation cancelled <Pinentry>\n", rc=1)
+    with pytest.raises(UnlockFailed) as excinfo:
+        rbw.backend().unlock()
+    assert "Operation cancelled" in str(excinfo.value)
+    assert excinfo.value.hint is None
+
+
+def test_other_no_tty_errors_are_not_blamed_on_pinentry(rbw):
+    rbw.respond(["unlock"], stderr="rbw unlock: Inappropriate ioctl for device\n", rc=1)
+    with pytest.raises(UnlockFailed) as excinfo:
+        rbw.backend().unlock()
+    assert excinfo.value.hint is None
+
+
+def test_sync_with_rejected_refresh_token_asks_to_log_in_again(rbw):
+    rbw.respond(["sync"], stderr=EXPIRED_LOGIN_STDERR, rc=1)
+    with pytest.raises(NotLoggedIn) as excinfo:
+        rbw.backend().sync()
+    assert "access_token" not in str(excinfo.value)
+    assert "rbw login" in excinfo.value.hint
+    assert "rbw purge" in excinfo.value.hint
+
+
 def test_status_reports_unlocked_and_db_mtime_as_last_sync(rbw):
     rbw.respond(["unlocked"])
     db = rbw.write_db()
@@ -285,6 +325,26 @@ def test_get_secrets_errors_never_echo_rbw_output(rbw):
     with pytest.raises(BackendError) as excinfo:
         rbw.backend().get_secrets(GITHUB_ID)
     assert SECRET_MARKER not in str(excinfo.value)
+
+
+def test_get_secrets_with_terminal_only_pinentry_asks_for_a_graphical_one(rbw):
+    stderr = NO_TTY_PINENTRY_STDERR.replace("rbw unlock:", f"rbw get: {SECRET_MARKER}:")
+    rbw.respond(["get", "--raw", "--", BANK_ID], stdout=f"{SECRET_MARKER}-partial",
+                stderr=stderr, rc=1)
+    with pytest.raises(UnlockFailed) as excinfo:
+        rbw.backend().get_secrets(BANK_ID)
+    assert "rbw config set pinentry pinentry-qt" in excinfo.value.hint
+    assert SECRET_MARKER not in str(excinfo.value)
+    assert "Inappropriate ioctl" not in str(excinfo.value)
+
+
+def test_get_secrets_with_cancelled_pinentry_is_still_rbw_get_failed(rbw):
+    rbw.respond(["get", "--raw", "--", BANK_ID], stderr="rbw get: pinentry error: "
+                                                        "Operation cancelled <Pinentry>\n", rc=1)
+    with pytest.raises(BackendError) as excinfo:
+        rbw.backend().get_secrets(BANK_ID)
+    assert type(excinfo.value) is BackendError
+    assert str(excinfo.value) == "rbw get failed"
 
 
 def test_get_secrets_invalid_totp_seed_is_secret_free_error(rbw):
