@@ -114,6 +114,56 @@ def test_confirm_shows_details_then_yes_and_no(fuzzel, out, expected):
     assert fuzzel.calls[0]["stdin"] == "https://github.com\nYes\nNo\n"
 
 
+LONG = "Item: www.365chess.com.evil.example /signup.php?ref=a-rather-long-query-string"
+
+
+def _width(argv: list[str]) -> int | None:
+    widths = [int(a.removeprefix("--width=")) for a in argv if a.startswith("--width=")]
+    assert len(widths) <= 1
+    return widths[0] if widths else None
+
+
+def test_confirm_widens_fuzzel_to_fit_the_longest_line(fuzzel):
+    DmenuPicker([str(fuzzel.path), "--dmenu"]).confirm("Fill X (x)?", ["Page: a.test", LONG])
+    assert _width(fuzzel.calls[0]["argv"]) >= len(LONG)
+
+
+def test_confirm_widens_fuzzel_to_fit_a_long_prompt(fuzzel):
+    prompt = "Fill A rather long Item name (someone@example.com)?"
+    DmenuPicker([str(fuzzel.path), "--dmenu"]).confirm(prompt, ["Page: a.test"])
+    assert _width(fuzzel.calls[0]["argv"]) >= len(f"{prompt}: ")
+
+
+def test_confirm_caps_the_fuzzel_width(fuzzel):
+    DmenuPicker([str(fuzzel.path), "--dmenu"]).confirm("Fill?", ["Item: " + "a" * 1000])
+    assert 80 <= _width(fuzzel.calls[0]["argv"]) < 1000
+
+
+def test_confirm_leaves_fuzzels_default_width_for_short_lines(fuzzel):
+    DmenuPicker([str(fuzzel.path), "--dmenu"]).confirm("Fill?", ["Page: a.test"])
+    assert _width(fuzzel.calls[0]["argv"]) is None
+
+
+@pytest.mark.parametrize("user_width", [["--width=40"], ["--width", "40"], ["-w", "40"], ["-w40"]])
+def test_confirm_keeps_a_width_the_user_set_for_fuzzel(fuzzel, user_width):
+    DmenuPicker([str(fuzzel.path), "--dmenu", *user_width]).confirm("Fill?", [LONG])
+    assert fuzzel.calls[0]["argv"] == ["--dmenu", *user_width, "--prompt=Fill?: "]
+
+
+@pytest.mark.parametrize("name", ["rofi", "dmenu", "wofi", "bemenu", "somethingelse"])
+def test_confirm_adds_no_width_for_other_pickers(tmp_path, name):
+    menu = FakeMenu(tmp_path, name)
+    DmenuPicker([str(menu.path)]).confirm("Fill?", [LONG])
+    assert not any("width" in a or a == "-w" for a in menu.calls[0]["argv"])
+
+
+def test_choose_and_ask_text_add_no_width(fuzzel):
+    picker = DmenuPicker([str(fuzzel.path), "--dmenu"])
+    picker.choose("Vault", [LONG])
+    picker.ask_text("Username " + LONG)
+    assert [_width(call["argv"]) for call in fuzzel.calls] == [None, None]
+
+
 def test_a_missing_picker_program_is_a_user_facing_error(tmp_path):
     from qutewarden.errors import QutewardenError
     picker = DmenuPicker([str(tmp_path / "no-such-menu"), "--dmenu"])

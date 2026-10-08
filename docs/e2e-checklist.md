@@ -67,7 +67,7 @@ Tick each box; note the qutebrowser, QtWebEngine and rbw versions at the top of 
 
 - [ ] `,v` lists every Login item, not just Candidates.
 - [ ] Pick a Candidate: fills as `fill` does (`filling <name> (<username>)`), no confirmation.
-- [ ] Pick an Item that isn't a Candidate (e.g. C): the confirmation `Fill <name> (<username>)?` lists `Page: <host>` (no `https://`) and one `Item: <host> <path>` line per URI (a `regular_expression` URI or one that isn't a URL shown verbatim); No fills nothing; Yes fills (Mismatch fill).
+- [ ] Pick an Item that isn't a Candidate (e.g. C): the confirmation `Fill <name> (<username>)?` lists `Page: <host>` (no `https://`) and one `Item: <host> <path>` line per URI (a `regular_expression` URI or one that isn't a URL shown verbatim); with fuzzel the window is wide enough that no line is cut off, e.g. for an Item URI `https://www.365chess.com.evil.example/signup.php`; No fills nothing; Yes fills (Mismatch fill).
 - [ ] With `vault.allow_copy` off: picking an Item goes straight to filling; no copy choices.
 - [ ] `vault --vault-allow-copy`: after picking an Item, a second menu offers `Fill`, `Copy password`, `Copy TOTP` (Items with TOTP) and `Copy username` (Items with a username). Each copy puts the value on the clipboard, says `copied <field> for <name> (<username>); clipboard clears in 30 s` without the value, and clears it after `vault.copy_clear_seconds` unless you copied something else meanwhile. `Fill` behaves as without the flag.
 
