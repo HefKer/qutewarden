@@ -155,7 +155,7 @@ By default qutewarden keeps to these rules:
 2. No secret appears in process arguments or environment variables, ours or a child's. Secrets go to and from `rbw` only through stdin and stdout.
 3. No secret is written to disk.
 4. No secret goes on the clipboard unless you turn it on (`totp.clipboard`, `vault.allow_copy`), and then it is cleared after the configured time (only if the clipboard still holds it).
-5. A Fill happens only when the page's origin, checked again inside the page just before filling, is the origin the userscript was started on, **and** the Item matches the page. The only exception is a Mismatch fill from `vault` that you confirmed after seeing the Item's URIs next to the page's origin.
+5. A Fill happens only when the page's origin, checked again inside the page just before filling, is the origin the userscript was started on, **and** the Item matches the page. The only exception is a Mismatch fill from `vault` that you confirmed after seeing each of the Item's URIs next to the page's host. Each URI is shown by its host, or as it is where a host alone could mislead (a regular expression, say), and nothing is shortened.
 6. Messages show Item names, usernames and origins, never passwords, TOTP codes, notes or custom fields.
 
 A test runs every subcommand against a fake vault and fails if a placeholder secret shows up in the FIFO, a child process's arguments or environment, or a message.
