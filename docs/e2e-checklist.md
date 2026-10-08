@@ -15,7 +15,7 @@ Tick each box; note the qutebrowser, QtWebEngine and rbw versions at the top of 
   - **B**: a second Login item with a URI on the same base domain as A (two Candidates).
   - **C**: a Login item whose URI has match mode `never` for that site.
   - **R**: a Re-prompt item (master password re-prompt on) for some site.
-- [ ] Make sure every userscript command reaches the log: `:set logging.level.ram debug` (the default) — qutebrowser logs each FIFO line as `Got userscript command: …` at debug level. Restart qutebrowser so `qute://log` starts empty.
+- [ ] Make sure every userscript command reaches the log: `:set logging.level.ram debug` (the default) — qutebrowser logs each FIFO line as `Got userscript command: …` at debug level. Restart qutebrowser as `qutebrowser --loglines 100000` so `qute://log` starts empty and keeps the whole session (it holds only the last 2000 lines by default, which drops the early runs before the final log search).
 
 ## unlock / lock / status / sync
 
@@ -82,7 +82,7 @@ After running everything above:
 - [ ] While a fill is pending (picker open), `ps -eo args | grep -E 'rbw|qutewarden|wl-copy|xclip'` shows no secret in any argv.
 - [ ] `grep -r` for A's password in `~/.local/share/qutebrowser`, `~/.cache/qutebrowser`, `~/.cache/qutewarden` and `/tmp`: no hits.
 - [ ] `:process` for the last qutewarden runs: their stdout/stderr contain no secrets.
-- [ ] Quick freeze check: kill the userscript during a fill (`pkill -f 'qutewarden fill'` with the picker open) — qutebrowser stays responsive.
+- [ ] Quick freeze check: kill the userscript during a fill (`pkill -f 'qutewarden-wrapped fill'` with the picker open; the Nix wrapper runs it as `.qutewarden-wrapped`) — qutebrowser stays responsive.
 
 ## Clean up
 
