@@ -18,13 +18,20 @@ import os
 import re
 import time
 from collections.abc import Callable, Mapping
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from qutewarden import proc
-from qutewarden.backend.base import (Backend, BackendError, BackendUnavailable, ItemNotFound,
-                                     NotLoggedIn, SaveFailed, UnlockFailed)
+from qutewarden.backend.base import (
+    Backend,
+    BackendError,
+    BackendUnavailable,
+    ItemNotFound,
+    NotLoggedIn,
+    SaveFailed,
+    UnlockFailed,
+)
 from qutewarden.model import ItemUri, LoginItem, MatchMode, Secrets, Status
 from qutewarden.totp import totp_code
 
@@ -77,7 +84,7 @@ class RbwBackend(Backend):
         except (NotLoggedIn, OSError):
             return Status(unlocked=unlocked, last_sync=None)
         return Status(unlocked=unlocked,
-                      last_sync=datetime.fromtimestamp(mtime, tz=timezone.utc))
+                      last_sync=datetime.fromtimestamp(mtime, tz=UTC))
 
     # --- reading ----------------------------------------------------------------
 
@@ -237,7 +244,9 @@ class RbwBackend(Backend):
 def _match_mode(match_type: object) -> MatchMode | None:
     if match_type is None:
         return None
-    return _MATCH_TYPES.get(match_type, MatchMode.NEVER)  # unknown: never match
+    if not isinstance(match_type, int):
+        return MatchMode.NEVER  # unknown: never match
+    return _MATCH_TYPES.get(match_type, MatchMode.NEVER)
 
 
 def _check_password(password: str) -> None:

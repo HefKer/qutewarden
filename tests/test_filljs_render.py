@@ -9,7 +9,8 @@ ORIGIN = "https://login.example.test"
 
 def test_unknown_mode_is_refused():
     with pytest.raises(ValueError):
-        render_fill_js(expected_origin=ORIGIN, mode="everything", password="QWSECRET-pw")
+        render_fill_js(expected_origin=ORIGIN, password="QWSECRET-pw",
+                       mode="everything")  # pyright: ignore[reportArgumentType]
 
 
 @pytest.mark.parametrize("nonce", ["", "0123ABCD", "x-y", "ab cd", "ab'cd"])

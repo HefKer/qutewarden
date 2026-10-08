@@ -4,8 +4,8 @@ import time
 from pathlib import Path
 
 import pytest
-
 from fakes.qutebrowser import FakeQutebrowser
+
 from qutewarden.errors import QutewardenError
 from qutewarden.fillroute import FillRouteError, pipe_dir, send_js
 from qutewarden.qute import FILL_WORLD_ID, Qute

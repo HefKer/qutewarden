@@ -10,14 +10,20 @@ from __future__ import annotations
 import json
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
 from qutewarden.backend import make_backend
-from qutewarden.backend.base import (BackendError, BackendUnavailable, ItemNotFound,
-                                     NotLoggedIn, SaveFailed, UnlockFailed)
+from qutewarden.backend.base import (
+    BackendError,
+    BackendUnavailable,
+    ItemNotFound,
+    NotLoggedIn,
+    SaveFailed,
+    UnlockFailed,
+)
 from qutewarden.backend.fake import SECRET_MARKER
 from qutewarden.backend.rbw import RbwBackend
 from qutewarden.config import ConfigError
@@ -153,7 +159,7 @@ def test_not_logged_in_is_reported_with_a_hint(rbw):
     rbw.respond(["unlock"], stderr="rbw unlock: failed to find email address in config\n", rc=1)
     with pytest.raises(NotLoggedIn) as excinfo:
         rbw.backend().unlock()
-    assert "rbw login" in excinfo.value.hint
+    assert "rbw login" in (excinfo.value.hint or "")
 
 
 def test_sync_failure_is_backend_error(rbw):
@@ -168,7 +174,7 @@ def test_status_reports_unlocked_and_db_mtime_as_last_sync(rbw):
     os.utime(db, (1_700_000_000, 1_700_000_000))
     status = rbw.backend().status()
     assert status.unlocked is True
-    assert status.last_sync == datetime.fromtimestamp(1_700_000_000, tz=timezone.utc)
+    assert status.last_sync == datetime.fromtimestamp(1_700_000_000, tz=UTC)
 
 
 def test_status_without_db_has_unknown_last_sync(rbw):
@@ -226,7 +232,7 @@ def test_list_logins_without_db_asks_for_sync(rbw):
     rbw.respond(["list", "--raw"], fixture("list_raw.json"))
     with pytest.raises(BackendError) as excinfo:
         rbw.backend().list_logins()
-    assert "rbw sync" in excinfo.value.hint
+    assert "rbw sync" in (excinfo.value.hint or "")
 
 
 def test_list_logins_not_logged_in_when_config_has_no_email(rbw):

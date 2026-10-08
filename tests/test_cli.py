@@ -2,8 +2,8 @@ import shlex
 from pathlib import Path
 
 import pytest
-
 from fakes.picker import FakePicker
+
 from qutewarden import cli
 from qutewarden.backend.fake import FakeBackend
 from qutewarden.commands import all_commands
@@ -39,10 +39,15 @@ class Recorder:
     """make_context that records the Config main() resolved."""
 
     def __init__(self) -> None:
-        self.config: Config | None = None
+        self._config: Config | None = None
+
+    @property
+    def config(self) -> Config:
+        assert self._config is not None, "make_context was never called"
+        return self._config
 
     def __call__(self, config: Config, environ) -> Context:
-        self.config = config
+        self._config = config
         return Context(
             config=config, environ=environ, qute=Qute.from_environ(environ),
             backend=FakeBackend(), picker=FakePicker(choices=[None]), clipboard=None,

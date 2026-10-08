@@ -8,8 +8,8 @@ import shlex
 import sys
 
 import pytest
-
 from fakes.picker import FakePicker
+
 from qutewarden import cli
 from qutewarden.backend.fake import FakeBackend
 from qutewarden.qute import Qute
@@ -149,7 +149,9 @@ def test_no_candidates_probes_the_page_and_respawns_without_saving(
     assert "QWSECRET" not in js
     assert '"mode": "probe"' in js
     assert '"origin": "https://new-site.test"' in js
-    nonce = re.search(r'"probeNonce": "([0-9a-f]+)"', js).group(1)
+    found = re.search(r'"probeNonce": "([0-9a-f]+)"', js)
+    assert found
+    nonce = found.group(1)
     assert len(nonce) == 16
     assert spawned(fake_qutebrowser.commands) == [
         "spawn", "--userscript", argv0, "generate",

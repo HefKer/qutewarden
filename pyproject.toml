@@ -22,3 +22,11 @@ testpaths = ["tests"]
 pythonpath = ["src"]
 addopts = "-ra --strict-markers"
 markers = ["browser: needs playwright + chromium (deselect with -m 'not browser')"]
+
+[tool.ruff]
+target-version = "py311"
+
+[tool.pyright]
+include = ["src", "tests"]
+extraPaths = ["src", "tests"]
+pythonVersion = "3.11"

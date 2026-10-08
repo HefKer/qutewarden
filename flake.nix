@@ -75,7 +75,16 @@
               p.hatchling
             ]))
             pkgs.rbw
+            pkgs.ruff
+            pkgs.pyright
+            # Runs qutewarden from this checkout's src/, against your real rbw.
+            (pkgs.writeShellScriptBin "qutewarden-dev" ''exec python -m qutewarden "$@"'')
           ];
+          # src/ on the path, so `python -c 'import qutewarden...'` and the
+          # clipboard clearer child (`python -m qutewarden.clipboard_clear`) work.
+          shellHook = ''
+            export PYTHONPATH="$PWD/src''${PYTHONPATH:+:$PYTHONPATH}"
+          '';
           # nixpkgs' Chromium build matching the python playwright package;
           # browsers downloaded by `playwright install` don't run on NixOS.
           PLAYWRIGHT_BROWSERS_PATH = "${pkgs.playwright-driver.browsers}";

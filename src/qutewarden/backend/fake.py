@@ -3,14 +3,19 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from qutewarden.backend.base import (Backend, BackendError, ItemNotFound, NotLoggedIn,
-                                     SaveFailed)
+from qutewarden.backend.base import (
+    Backend,
+    BackendError,
+    ItemNotFound,
+    NotLoggedIn,
+    SaveFailed,
+)
 from qutewarden.model import ItemUri, LoginItem, MatchMode, Secrets, Status
 
 SECRET_MARKER = "QWSECRET"
-FAKE_LAST_SYNC = datetime(2026, 1, 2, 3, 4, 5, tzinfo=timezone.utc)
+FAKE_LAST_SYNC = datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC)
 
 
 def fake_password(item_id: str) -> str:

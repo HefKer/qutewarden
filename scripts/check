@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Lint, typecheck and the full test suite. Run in the dev shell:
+#   nix develop -c scripts/check
+# Extra arguments go to pytest (e.g. `-m "not browser"`, `-x`).
+set -euo pipefail
+cd "$(dirname "$0")/.."
+ruff check .
+pyright
+pytest -q "$@"

@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import dataclasses
+import itertools
 
 import pytest
-
 from fakes.picker import FakePicker
+
 from qutewarden import cli
 from qutewarden.backend.fake import FakeBackend, fake_password, fake_totp
 from qutewarden.qute import Qute
@@ -51,7 +52,7 @@ def test_picking_a_candidate_fills_it_without_asking(vault, fake_qutebrowser):
     assert '"mode": "auto"' in js
     assert f'"password": "{fake_password("github-alt")}"' in js
     assert '"origin": "https://github.com"' in js
-    assert "Yes" not in sum(picker.lines, [])
+    assert "Yes" not in itertools.chain.from_iterable(picker.lines)
     assert fake_qutebrowser.messages == [("info", "qutewarden: filling GitHub (work) (alice-work)")]
 
 
@@ -94,7 +95,7 @@ def test_without_vault_allow_copy_no_copy_action_is_offered(vault):
     picker = FakePicker()
     vault(picker=picker)
     assert picker.prompts == ["Vault"]
-    assert not any("Copy" in line for line in sum(picker.lines, []))
+    assert not any("Copy" in line for line in itertools.chain.from_iterable(picker.lines))
 
 
 def test_with_vault_allow_copy_the_actions_follow_the_item_choice(vault):

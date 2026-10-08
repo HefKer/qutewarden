@@ -2,10 +2,20 @@
 
 import pytest
 
-from qutewarden.backend.base import (Backend, BackendError, ItemNotFound, NotLoggedIn,
-                                     SaveFailed)
-from qutewarden.backend.fake import (FAKE_ITEMS, SECRET_MARKER, FakeBackend, fake_password,
-                                     fake_totp)
+from qutewarden.backend.base import (
+    Backend,
+    BackendError,
+    ItemNotFound,
+    NotLoggedIn,
+    SaveFailed,
+)
+from qutewarden.backend.fake import (
+    FAKE_ITEMS,
+    SECRET_MARKER,
+    FakeBackend,
+    fake_password,
+    fake_totp,
+)
 from qutewarden.model import LoginItem, MatchMode, Secrets, Status
 
 

@@ -13,10 +13,17 @@ import shlex
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
+from typing import Any
 
 from qutewarden import __version__
 from qutewarden.commands import all_commands
-from qutewarden.config import SETTINGS, Config, Setting, default_config_path, load_config
+from qutewarden.config import (
+    SETTINGS,
+    Config,
+    Setting,
+    default_config_path,
+    load_config,
+)
 from qutewarden.context import Context
 from qutewarden.errors import QutewardenError, UserCancelled
 from qutewarden.model import MatchMode
@@ -35,7 +42,7 @@ def _settings_parser() -> argparse.ArgumentParser:
 
 
 def _add_setting_flag(group: argparse._ArgumentGroup, setting: Setting) -> None:
-    common = {"dest": setting.attr, "default": argparse.SUPPRESS, "help": setting.help}
+    common: dict[str, Any] = {"dest": setting.attr, "default": argparse.SUPPRESS, "help": setting.help}
     if setting.type is bool:
         group.add_argument(setting.flag, action=argparse.BooleanOptionalAction, **common)
     elif setting.type is int:
