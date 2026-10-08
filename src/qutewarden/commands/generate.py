@@ -69,10 +69,14 @@ def run(ctx: Context, args: argparse.Namespace) -> int:
 def _create_item(ctx: Context, page_url: str, origin: str, nonce: str) -> int:
     """Stage 2: username from the DOM dump (or the picker), then generate, save, fill."""
     username = _probed_username(ctx.environ.get("QUTE_HTML"), nonce)
+    # A username typed into the picker also goes into the page (#16); a probed
+    # one is already there.
+    fill_username = None
     if not username:
         username = ctx.picker.ask_text("Username")
         if username is None:
             raise UserCancelled()
+        fill_username = username or None
     flow.ensure_unlocked(ctx)
     item = LoginItem(id="", name=urlsplit(origin).hostname or origin, username=username or None,
                      uris=(ItemUri(origin),))
@@ -84,7 +88,7 @@ def _create_item(ctx: Context, page_url: str, origin: str, nonce: str) -> int:
         ctx.qute.message_info(f"saved new password for {flow.describe(item)}; "
                               "not filled, it doesn't match this page")
         return 0
-    _fill(ctx, origin, item, password, probe_nonce=nonce)
+    _fill(ctx, origin, item, password, username=fill_username, probe_nonce=nonce)
     return 0
 
 
@@ -163,8 +167,10 @@ def _flag(setting: Setting, value: object) -> list[str]:
 
 
 def _fill(ctx: Context, origin: str, item: LoginItem, password: str, *,
-          probe_nonce: str | None = None) -> None:
-    # Only the new-password fields are filled (spec, `generate` step 3).
-    js = render_fill_js(expected_origin=origin, mode="new_password", password=password,
-                        submit=ctx.config.submit_after_fill, probe_nonce=probe_nonce)
+          username: str | None = None, probe_nonce: str | None = None) -> None:
+    # The new-password fields, plus ``username`` into an empty username field
+    # (spec, `generate` step 3).
+    js = render_fill_js(expected_origin=origin, mode="new_password", username=username,
+                        password=password, submit=ctx.config.submit_after_fill,
+                        probe_nonce=probe_nonce)
     flow.send_fill(ctx, js, f"saved new password, filling {flow.describe(item)}")
