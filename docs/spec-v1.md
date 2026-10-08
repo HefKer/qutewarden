@@ -57,7 +57,7 @@ Pick a Candidate, as in steps 1–3 of `fill`, then fill its TOTP code. If `totp
 ### `generate`
 1. Generate a password using the `generator.*` settings.
 2. Save it to the vault **before** filling:
-   - No Candidates: create a Login item named after the page's host, with a URI for the page's origin and no match mode. The username is read from the page's username field if possible, otherwise asked for with a text prompt in the picker.
+   - No Candidates: create a Login item named after the page's host, with a URI for the page's origin and no match mode. The username is read from the page's username field if possible, otherwise asked for with a text prompt in the picker. A username asked for in the picker is also filled into the page's username field in step 3, if that field is empty.
    - One Candidate: ask "Replace password for `<username>` on `<name>`?", then update it. The old password goes into the Item's history.
    - Several Candidates: pick one, or choose "new Item".
 3. Fill the password into the page's new-password fields (`autocomplete="new-password"`, or the password fields if there are no such fields; confirmation fields too).
