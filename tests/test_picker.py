@@ -129,31 +129,31 @@ def _set_width(argv: list[str]) -> int:
     return width
 
 
-def test_confirm_widens_fuzzel_to_fit_the_longest_line(fuzzel):
+def test_confirm_gives_fuzzel_at_least_60_columns_for_short_lines(fuzzel):
+    DmenuPicker([str(fuzzel.path), "--dmenu"]).confirm("Fill?", ["Page: a.test"])
+    assert _set_width(fuzzel.calls[0]["argv"]) == 60
+
+
+def test_confirm_widens_fuzzel_to_the_longest_line(fuzzel):
     DmenuPicker([str(fuzzel.path), "--dmenu"]).confirm("Fill X (x)?", ["Page: a.test", LONG])
-    assert _set_width(fuzzel.calls[0]["argv"]) >= len(LONG)
+    assert _set_width(fuzzel.calls[0]["argv"]) == len(LONG)
 
 
-def test_confirm_widens_fuzzel_to_fit_a_long_prompt(fuzzel):
-    prompt = "Fill A rather long Item name (someone@example.com)?"
+def test_confirm_widens_fuzzel_to_a_long_prompt(fuzzel):
+    prompt = "Fill A rather long Item name (someone.with.a.long.address@example.com)?"
     DmenuPicker([str(fuzzel.path), "--dmenu"]).confirm(prompt, ["Page: a.test"])
-    assert _set_width(fuzzel.calls[0]["argv"]) >= len(f"{prompt}: ")
+    assert _set_width(fuzzel.calls[0]["argv"]) == len(f"{prompt}: ")
 
 
 def test_confirm_counts_wide_characters_as_two_columns(fuzzel):
     prompt = "Fill " + "日本語" * 10 + "?"
     DmenuPicker([str(fuzzel.path), "--dmenu"]).confirm(prompt, ["Page: a.test"])
-    assert _set_width(fuzzel.calls[0]["argv"]) >= len(f"{prompt}: ") + 30
+    assert _set_width(fuzzel.calls[0]["argv"]) == len(f"{prompt}: ") + 30
 
 
-def test_confirm_caps_the_fuzzel_width(fuzzel):
+def test_confirm_caps_the_fuzzel_width_at_160(fuzzel):
     DmenuPicker([str(fuzzel.path), "--dmenu"]).confirm("Fill?", ["Item: " + "a" * 1000])
-    assert 80 <= _set_width(fuzzel.calls[0]["argv"]) < 1000
-
-
-def test_confirm_leaves_fuzzels_default_width_for_short_lines(fuzzel):
-    DmenuPicker([str(fuzzel.path), "--dmenu"]).confirm("Fill?", ["Page: a.test"])
-    assert _width(fuzzel.calls[0]["argv"]) is None
+    assert _set_width(fuzzel.calls[0]["argv"]) == 160
 
 
 @pytest.mark.parametrize("user_width", [["--width=40"], ["--width", "40"], ["-w", "40"], ["-w40"]])
