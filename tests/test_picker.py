@@ -134,6 +134,12 @@ def test_confirm_widens_fuzzel_to_fit_a_long_prompt(fuzzel):
     assert _width(fuzzel.calls[0]["argv"]) >= len(f"{prompt}: ")
 
 
+def test_confirm_counts_wide_characters_as_two_columns(fuzzel):
+    prompt = "Fill " + "日本語" * 10 + "?"
+    DmenuPicker([str(fuzzel.path), "--dmenu"]).confirm(prompt, ["Page: a.test"])
+    assert _width(fuzzel.calls[0]["argv"]) >= len(f"{prompt}: ") + 30
+
+
 def test_confirm_caps_the_fuzzel_width(fuzzel):
     DmenuPicker([str(fuzzel.path), "--dmenu"]).confirm("Fill?", ["Item: " + "a" * 1000])
     assert 80 <= _width(fuzzel.calls[0]["argv"]) < 1000

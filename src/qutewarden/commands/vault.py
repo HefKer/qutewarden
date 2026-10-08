@@ -85,12 +85,12 @@ def _copy(ctx: Context, item: LoginItem, field: Field) -> None:
 def _confirm_mismatch(ctx: Context, item: LoginItem, origin: str) -> bool:
     """Ask before a Mismatch fill, showing the Item's URIs next to the page's origin.
 
-    Hosts come first so a look-alike (``www.365chess.com.evil.example``) can't
+    Both are shown host first, without ``https://``. Hosts come first so a look-alike (``www.365chess.com.evil.example``) can't
     hide past the picker's right edge. Lines are never shortened.
     """
     uris = [f"Item: {_uri_text(ctx, u)}" for u in item.uris] or ["Item: (no URIs)"]
     return ctx.picker.confirm(f"Fill {flow.describe(item)}?",
-                              [f"Page: {origin.removeprefix('https://')}", *uris])
+                              [f"Page: {_host_first(origin)}", *uris])
 
 
 def _uri_text(ctx: Context, item_uri: ItemUri) -> str:
@@ -108,7 +108,12 @@ def _uri_text(ctx: Context, item_uri: ItemUri) -> str:
     if not authority or any(c in "@\\" or c.isspace() for c in authority):
         return item_uri.uri
     try:
-        host = match.origin_of(url["head"]).removeprefix("https://")
+        host = _host_first(match.origin_of(url["head"]))
     except QutewardenError:
         return item_uri.uri
     return f"{host} {url['rest']}" if url["rest"] else host
+
+
+def _host_first(origin: str) -> str:
+    """An origin without ``https://``; any other scheme stays."""
+    return origin.removeprefix("https://")

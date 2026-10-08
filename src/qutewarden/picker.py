@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import unicodedata
 from collections.abc import Mapping, Sequence
 from typing import Protocol
 
@@ -99,10 +100,15 @@ def _fuzzel_width_args(argv: Sequence[str], shown: Sequence[str]) -> list[str]:
     if os.path.basename(argv[0]) != "fuzzel" or any(
             a == "--width" or a.startswith(("-w", "--width=")) for a in argv[1:]):
         return []
-    needed = max(len(line) for line in shown)
+    needed = max(_columns(line) for line in shown)
     if needed <= _FUZZEL_DEFAULT_WIDTH:
         return []
     return [f"--width={min(needed, _FUZZEL_MAX_WIDTH)}"]
+
+
+def _columns(text: str) -> int:
+    """Terminal-style display width: wide (CJK, emoji) characters take two columns."""
+    return sum(2 if unicodedata.east_asian_width(c) in "WF" else 1 for c in text)
 
 
 def _one_line(text: str) -> str:

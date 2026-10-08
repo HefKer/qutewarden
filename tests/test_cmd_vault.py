@@ -26,7 +26,8 @@ def vault(ctx, fake_qutebrowser):
 
         def make_context(config, env):
             return dataclasses.replace(
-                ctx, config=dataclasses.replace(config, **config_changes), environ=env, qute=Qute.from_environ(env),
+                ctx, config=dataclasses.replace(config, **config_changes),
+                environ=env, qute=Qute.from_environ(env),
                 backend=backend if backend is not None else ctx.backend,
                 picker=picker if picker is not None else ctx.picker,
                 clipboard=ctx.clipboard if clipboard is ... else clipboard)
