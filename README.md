@@ -171,10 +171,14 @@ Limits:
 ## Development
 
 ```sh
-nix develop -c pytest                    # full suite, incl. Playwright/Chromium tests of the fill JS
-nix develop -c pytest -m "not browser"   # without the browser
-nix build                                # the package; ./result/bin/qutewarden
+nix develop -c scripts/check                    # ruff, pyright, full suite (incl. Playwright/Chromium tests of the fill JS)
+nix develop -c scripts/check -m "not browser"   # same, tests without the browser
+nix develop -c qutewarden-dev <subcommand>      # run this checkout's src/ against your real rbw
+nix build                                       # the package; ./result/bin/qutewarden
+git config core.hooksPath .githooks             # once per clone: run scripts/check before each commit
 ```
+
+CI runs `scripts/check` and `nix build` on every PR.
 
 Before a release, go through the manual [end-to-end checklist](docs/e2e-checklist.md) in a real qutebrowser. Vocabulary is in [`GLOSSARY.md`](GLOSSARY.md), decisions in [`docs/adr/`](docs/adr/).
 
