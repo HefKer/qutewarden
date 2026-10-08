@@ -12,3 +12,7 @@ Saving goes through stdin, never arguments: rbw 1.15's `rbw add` and `rbw edit` 
 ## Consequences
 
 We depend on rbw's db file layout, which isn't a public interface. A missing or unreadable file is reported with the hint `rbw sync`. The last sync time shown by `status` is that file's modification time, because rbw has no command for it.
+
+## Amendment (v2): item types and linked custom fields
+
+`rbw get --raw` gives Card and Identity values without a type tag, and leaves out what a linked custom field stands for. The rbw Backend therefore also reads each Item's type and each linked field's `linked_id` from the same db file, again only reading it.
