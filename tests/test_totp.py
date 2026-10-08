@@ -37,7 +37,8 @@ def test_otpauth_custom_period():
     assert totp_code(f"otpauth://totp/x?secret={SHA1_SEED}&period=60", now=119) == "287082"
 
 
-@pytest.mark.parametrize("seed", [SHA1_SEED, SHA1_SEED.lower(), " GEZD GNBV GY3T QOJQ GEZD GNBV GY3T QOJQ "])
+@pytest.mark.parametrize(
+    "seed", [SHA1_SEED, SHA1_SEED.lower(), " GEZD GNBV GY3T QOJQ GEZD GNBV GY3T QOJQ "])
 def test_bare_base32_seed_any_case_or_spacing(seed):
     assert totp_code(seed, now=59) == "287082"
 

@@ -191,7 +191,9 @@ def test_signup_keeps_a_username_the_user_typed(page):
 def test_new_password_without_autocomplete_fills_every_password_field(page):
     load(page, "signup.html")
     page.evaluate("""() => {
-        for (const el of document.querySelectorAll('[autocomplete]')) el.removeAttribute('autocomplete');
+        for (const el of document.querySelectorAll('[autocomplete]')) {
+            el.removeAttribute('autocomplete');
+        }
     }""")
     run_isolated(page, render_fill_js(
         expected_origin=ORIGIN, mode="new_password", password="QWSECRET-generated",

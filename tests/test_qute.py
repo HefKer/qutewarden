@@ -78,7 +78,8 @@ def test_jseval_file_uses_quiet_isolated_world_and_absolute_path(fifo: Path, tmp
     script = tmp_path / "dir with space" / "fill-abc.js"
     Qute.from_environ({"QUTE_FIFO": str(fifo)}).jseval_file(script)
     [line] = lines(fifo)
-    assert shlex.split(line) == ["jseval", "--quiet", f"--world={FILL_WORLD_ID}", "--file", str(script)]
+    assert shlex.split(line) == [
+        "jseval", "--quiet", f"--world={FILL_WORLD_ID}", "--file", str(script)]
 
 
 def test_jseval_file_rejects_relative_path(fifo: Path):

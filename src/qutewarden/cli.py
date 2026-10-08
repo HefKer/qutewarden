@@ -42,7 +42,8 @@ def _settings_parser() -> argparse.ArgumentParser:
 
 
 def _add_setting_flag(group: argparse._ArgumentGroup, setting: Setting) -> None:
-    common: dict[str, Any] = {"dest": setting.attr, "default": argparse.SUPPRESS, "help": setting.help}
+    common: dict[str, Any] = {
+        "dest": setting.attr, "default": argparse.SUPPRESS, "help": setting.help}
     if setting.type is bool:
         group.add_argument(setting.flag, action=argparse.BooleanOptionalAction, **common)
     elif setting.type is int:

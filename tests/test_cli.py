@@ -143,7 +143,8 @@ def test_config_flag_selects_another_file(environ, tmp_path):
 
 def test_invalid_mode_flag_is_a_usage_error(environ):
     with pytest.raises(SystemExit) as exc:
-        cli.main(["fill", "--matching-default-mode", "fuzzy"], environ=environ, make_context=Recorder())
+        cli.main(["fill", "--matching-default-mode", "fuzzy"], environ=environ,
+                 make_context=Recorder())
     assert exc.value.code == 2
 
 
