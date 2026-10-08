@@ -251,6 +251,74 @@ def test_form_is_submitted_only_when_asked(page, submit, submitted):
     assert page.evaluate("window.submitted") == submitted
 
 
+def fill_and_submit(page):
+    run_isolated(page, render_fill_js(
+        expected_origin=ORIGIN, mode="auto", username="alice", password="QWSECRET-pw",
+        submit=True,
+    ))
+    return page.evaluate("window.submissions")
+
+
+def test_submit_sends_the_default_buttons_name_and_value(page):
+    load(page, "login_single.html")
+    [submission] = fill_and_submit(page)
+    assert submission["submitter"] == "submit"
+    assert ["action", "signin"] in submission["data"]
+
+
+def test_submit_uses_a_default_button_linked_from_outside_the_form(page):
+    load(page, "login_single.html")
+    page.evaluate("""() => {
+        const button = document.getElementById("submit");
+        button.setAttribute("form", "login");
+        document.body.prepend(button);
+    }""")
+    [submission] = fill_and_submit(page)
+    assert submission["submitter"] == "submit"
+    assert ["action", "signin"] in submission["data"]
+
+
+def test_submit_uses_the_first_submit_button_in_tree_order(page):
+    load(page, "login_single.html")
+    page.evaluate("""() => {
+        const image = document.createElement("input");
+        image.type = "image";
+        image.id = "image";
+        image.name = "go";
+        document.getElementById("login").prepend(image);
+    }""")
+    [submission] = fill_and_submit(page)
+    assert submission["submitter"] == "image"
+
+
+def test_submit_with_a_disabled_default_button_sends_no_submitter(page):
+    load(page, "login_single.html")
+    page.evaluate("document.getElementById('submit').disabled = true")
+    [submission] = fill_and_submit(page)
+    assert submission["submitter"] is None
+
+
+def test_submit_with_a_default_button_in_a_disabled_fieldset_sends_no_submitter(page):
+    load(page, "login_single.html")
+    page.evaluate("""() => {
+        const fieldset = document.createElement("fieldset");
+        fieldset.disabled = true;
+        const button = document.getElementById("submit");
+        button.replaceWith(fieldset);
+        fieldset.append(button);
+    }""")
+    [submission] = fill_and_submit(page)
+    assert submission["submitter"] is None
+
+
+def test_submit_without_a_submit_button_sends_no_submitter(page):
+    load(page, "login_single.html")
+    page.evaluate("document.getElementById('submit').remove()")
+    [submission] = fill_and_submit(page)
+    assert submission["submitter"] is None
+    assert ["password", "QWSECRET-pw"] in submission["data"]
+
+
 def test_submit_without_form_clicks_the_submit_button(page):
     load(page, "react_like.html")
     run_isolated(page, render_fill_js(
