@@ -218,21 +218,20 @@ function findSubmitButton(filled) {
 
 // The form's default button: its first submit button in tree order,
 // including ones outside it linked with form=. form.elements would miss
-// input[type=image], so walk the form's tree instead. Null if disabled, so
-// the form is still submitted, just without a submitter.
+// input[type=image], so walk the form's tree instead. Unlike EXPLICIT_SUBMIT,
+// el.type also counts a <button> with no or an invalid type. Null if disabled
+// (also by a disabled <fieldset>), so the form is submitted without a submitter.
 function defaultButton(form) {
   const button = Array.from(form.getRootNode().querySelectorAll("button, input"))
     .find((el) => el.form === form && (el.type === "submit" || el.type === "image"));
-  return button && !button.disabled ? button : null;
+  return button && !button.matches(":disabled") ? button : null;
 }
 
 function submitAfter(filled) {
   const field = filled[filled.length - 1];
   if (field.form) {
     // With a submitter, its name/value is sent, like pressing Enter would.
-    const button = defaultButton(field.form);
-    if (button) field.form.requestSubmit(button);
-    else field.form.requestSubmit();
+    field.form.requestSubmit(defaultButton(field.form));
     return;
   }
   const button = findSubmitButton(filled);

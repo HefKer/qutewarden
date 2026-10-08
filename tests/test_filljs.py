@@ -253,7 +253,7 @@ def test_form_is_submitted_only_when_asked(page, submit, submitted):
 
 def fill_and_submit(page):
     run_isolated(page, render_fill_js(
-        expected_origin=ORIGIN, mode="login", username="alice", password="QWSECRET-pw",
+        expected_origin=ORIGIN, mode="auto", username="alice", password="QWSECRET-pw",
         submit=True,
     ))
     return page.evaluate("window.submissions")
@@ -294,6 +294,19 @@ def test_submit_uses_the_first_submit_button_in_tree_order(page):
 def test_submit_with_a_disabled_default_button_sends_no_submitter(page):
     load(page, "login_single.html")
     page.evaluate("document.getElementById('submit').disabled = true")
+    [submission] = fill_and_submit(page)
+    assert submission["submitter"] is None
+
+
+def test_submit_with_a_default_button_in_a_disabled_fieldset_sends_no_submitter(page):
+    load(page, "login_single.html")
+    page.evaluate("""() => {
+        const fieldset = document.createElement("fieldset");
+        fieldset.disabled = true;
+        const button = document.getElementById("submit");
+        button.replaceWith(fieldset);
+        fieldset.append(button);
+    }""")
     [submission] = fill_and_submit(page)
     assert submission["submitter"] is None
 
