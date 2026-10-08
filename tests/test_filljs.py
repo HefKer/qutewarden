@@ -251,6 +251,29 @@ def test_form_is_submitted_only_when_asked(page, submit, submitted):
     assert page.evaluate("window.submitted") == submitted
 
 
+def fill_and_submit(page):
+    run_isolated(page, render_fill_js(
+        expected_origin=ORIGIN, mode="login", username="alice", password="QWSECRET-pw",
+        submit=True,
+    ))
+    return page.evaluate("window.submissions")
+
+
+def test_submit_with_a_disabled_default_button_sends_no_submitter(page):
+    load(page, "login_single.html")
+    page.evaluate("document.getElementById('submit').disabled = true")
+    [submission] = fill_and_submit(page)
+    assert submission["submitter"] is None
+
+
+def test_submit_without_a_submit_button_sends_no_submitter(page):
+    load(page, "login_single.html")
+    page.evaluate("document.getElementById('submit').remove()")
+    [submission] = fill_and_submit(page)
+    assert submission["submitter"] is None
+    assert ["password", "QWSECRET-pw"] in submission["data"]
+
+
 def test_submit_without_form_clicks_the_submit_button(page):
     load(page, "react_like.html")
     run_isolated(page, render_fill_js(
