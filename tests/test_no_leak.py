@@ -19,11 +19,11 @@ import sys
 from dataclasses import dataclass, field
 
 import pytest
-
 from fakes.children import ChildRecorder
 from fakes.clipboard import FakeClipboard
 from fakes.picker import FakePicker
 from fakes.qutebrowser import FakeQutebrowser
+
 from qutewarden import cli, commands
 from qutewarden.backend.fake import SECRET_MARKER
 from qutewarden.commands import Command, all_commands

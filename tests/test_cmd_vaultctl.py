@@ -5,9 +5,15 @@ import time
 from pathlib import Path
 
 import pytest
+from fakes.picker import FakePicker
 
 from qutewarden import cli
-from qutewarden.backend.base import BackendError, BackendUnavailable, NotLoggedIn, UnlockFailed
+from qutewarden.backend.base import (
+    BackendError,
+    BackendUnavailable,
+    NotLoggedIn,
+    UnlockFailed,
+)
 from qutewarden.backend.fake import FakeBackend
 from qutewarden.context import Context
 from qutewarden.qute import Qute
@@ -43,7 +49,7 @@ def run(name: str, backend: FakeBackend, environ: dict[str, str]) -> tuple[int, 
     def make_context(config, env) -> Context:
         return Context(
             config=config, environ=env, qute=Qute.from_environ(env), backend=backend,
-            picker=None, clipboard=None,
+            picker=FakePicker(), clipboard=None,
             runtime_dir=Path(env["XDG_RUNTIME_DIR"]) / "qutewarden",
             cache_dir=Path(env["XDG_CACHE_HOME"]) / "qutewarden",
             generate_password=lambda cfg: "QWSECRET-generated",

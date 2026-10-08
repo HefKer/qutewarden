@@ -11,7 +11,7 @@ from __future__ import annotations
 import io
 import os
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Self
 
 
 @dataclass
@@ -39,7 +39,7 @@ class _FakePopen:
         self.stdout = io.StringIO() if text else io.BytesIO()
         self.stderr = io.StringIO() if text else io.BytesIO()
 
-    def __enter__(self) -> _FakePopen:
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(self, *exc: object) -> None:

@@ -8,7 +8,6 @@ Item's secrets to the page through the fill route (ADR-0002).
 from __future__ import annotations
 
 from dataclasses import dataclass
-
 from typing import TYPE_CHECKING
 
 from qutewarden import match

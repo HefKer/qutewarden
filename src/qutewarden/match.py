@@ -12,7 +12,7 @@ import ipaddress
 import re
 from collections.abc import Iterable
 from pathlib import Path
-from typing import NamedTuple
+from typing import Any, NamedTuple
 from urllib.parse import urlsplit
 
 import tldextract
@@ -32,7 +32,7 @@ def make_suffix_extractor(cache_dir: Path, *, offline: bool = False) -> tldextra
     ``cache_dir`` is ``Context.cache_dir``. ``offline=True`` uses only the PSL
     snapshot bundled with tldextract (no network; for tests).
     """
-    kwargs = {"suffix_list_urls": ()} if offline else {}
+    kwargs: dict[str, Any] = {"suffix_list_urls": ()} if offline else {}
     return tldextract.TLDExtract(
         cache_dir=str(Path(cache_dir) / "tldextract"),
         include_psl_private_domains=True,

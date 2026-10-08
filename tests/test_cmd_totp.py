@@ -5,8 +5,8 @@ from __future__ import annotations
 import dataclasses
 
 import pytest
-
 from fakes.picker import FakePicker
+
 from qutewarden import cli
 from qutewarden.backend.fake import FakeBackend, fake_password, fake_totp
 from qutewarden.qute import Qute

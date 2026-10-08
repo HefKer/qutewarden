@@ -11,6 +11,7 @@ import tomllib
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from qutewarden.errors import QutewardenError
 from qutewarden.model import MatchMode
@@ -99,7 +100,7 @@ def load_config(path: Path | None, overrides: Mapping[str, object]) -> Config:
     A missing file means defaults. ``overrides`` may contain unrelated keys
     (e.g. ``vars(namespace)``); only Setting attrs are used.
     """
-    values: dict[str, object] = {}
+    values: dict[str, Any] = {}  # each coerced to its Setting's type
     if path is not None:
         for key, raw in _read_toml(path).items():
             setting = _BY_KEY[key]

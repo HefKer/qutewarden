@@ -100,9 +100,9 @@ def test_default_config_path_uses_xdg_config_home():
 
 
 def test_default_config_path_falls_back_to_home():
-    assert default_config_path({"HOME": "/home/u"}) == Path("/home/u/.config/qutewarden/config.toml")
-    assert default_config_path({"XDG_CONFIG_HOME": "", "HOME": "/home/u"}) == Path(
-        "/home/u/.config/qutewarden/config.toml")
+    expected = Path("/home/u/.config/qutewarden/config.toml")
+    assert default_config_path({"HOME": "/home/u"}) == expected
+    assert default_config_path({"XDG_CONFIG_HOME": "", "HOME": "/home/u"}) == expected
 
 
 def test_setting_flag_names():

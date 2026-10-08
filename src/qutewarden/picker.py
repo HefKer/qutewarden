@@ -27,12 +27,15 @@ _FUZZEL_MAX_WIDTH = 160
 class Picker(Protocol):
     def choose(self, prompt: str, lines: Sequence[str]) -> int | None:
         """Index of the chosen line, None if cancelled."""
+        ...
 
     def ask_text(self, prompt: str) -> str | None:
         """Free text typed by the user, None if cancelled."""
+        ...
 
     def confirm(self, prompt: str, details: Sequence[str] = ()) -> bool:
         """Show ``details`` then "Yes" and "No"; True only for "Yes"."""
+        ...
 
 
 def detect_picker_argv(environ: Mapping[str, str]) -> tuple[str, ...]:

@@ -19,6 +19,7 @@ import secrets
 import shlex
 import sys
 from html.parser import HTMLParser
+from typing import cast
 from urllib.parse import urlsplit
 
 from qutewarden import flow, match
@@ -162,7 +163,7 @@ def _flag(setting: Setting, value: object) -> list[str]:
     if setting.type is bool:
         return [setting.flag if value else "--no-" + setting.flag.removeprefix("--")]
     if setting.type is tuple:
-        return [setting.flag, shlex.join(value)]
+        return [setting.flag, shlex.join(cast("tuple[str, ...]", value))]
     return [setting.flag, str(value)]
 
 

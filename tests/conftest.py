@@ -5,11 +5,11 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
-
 from fakes.children import ChildRecorder
 from fakes.clipboard import FakeClipboard
 from fakes.picker import FakePicker
 from fakes.qutebrowser import FakeQutebrowser
+
 from qutewarden.backend.fake import FakeBackend
 from qutewarden.config import load_config
 from qutewarden.context import Context

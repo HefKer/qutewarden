@@ -24,7 +24,10 @@ PASTE_ARGV: dict[str, tuple[str, ...]] = {
 
 def main(argv: Sequence[str] | None = None, *, stdin: TextIO | None = None,
          sleep: Callable[[float], None] = time.sleep) -> int:
-    """Exit 0 when done (cleared or left alone), 1 if the clipboard couldn't be read, 2 on bad args."""
+    """Clear the clipboard if it still holds the value; return the exit code.
+
+    0 when done (cleared or left alone), 1 if the clipboard couldn't be read, 2 on bad args.
+    """
     args = list(sys.argv[1:] if argv is None else argv)
     if len(args) != 2 or args[0] not in PASTE_ARGV or not args[1].isdigit():
         return 2

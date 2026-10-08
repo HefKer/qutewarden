@@ -5,6 +5,7 @@ from __future__ import annotations
 import subprocess
 import sys
 import zipfile
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -15,7 +16,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 @pytest.fixture(scope="module")
-def wheel(tmp_path_factory: pytest.TempPathFactory) -> zipfile.ZipFile:
+def wheel(tmp_path_factory: pytest.TempPathFactory) -> Iterator[zipfile.ZipFile]:
     out = tmp_path_factory.mktemp("dist")
     subprocess.run([sys.executable, "-m", "hatchling", "build", "-t", "wheel", "-d", str(out)],
                    cwd=ROOT, check=True, capture_output=True)

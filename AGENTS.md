@@ -1,5 +1,9 @@
 # AGENTS.md
 
+## Checks
+
+`nix develop -c scripts/check` runs ruff, pyright and the full suite; extra args go to pytest (`-m "not browser"`, a test path). A clean `main` passes, so any finding is yours. `nix develop -c qutewarden-dev <subcommand>` runs `src/` against the real rbw.
+
 ## Agent skills
 
 ### Issue tracker
