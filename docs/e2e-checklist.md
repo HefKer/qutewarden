@@ -10,6 +10,7 @@ Tick each box; note the qutebrowser, QtWebEngine and rbw versions at the top of 
 - [ ] Link it where qutebrowser looks (`spawn --userscript` doesn't search `PATH`): `ln -sf "$PWD/result/bin/qutewarden" ~/.local/share/qutebrowser/userscripts/qutewarden`.
 - [ ] Add the key bindings from the README (`,p` fill, `,t` totp, `,g` generate, `,v` vault, `,u` unlock, `,l` lock, `,s` sync, `,S` status) and `:config-source`.
 - [ ] `rbw --version` is ≥ 1.15 and `rbw login` has been done.
+- [ ] `rbw config show` has a graphical `pinentry` (e.g. `pinentry-qt`, `pinentry-gnome3`, `pinentry-bemenu`, `pinentry-rofi`), because qutebrowser userscripts have no terminal. After changing it, run `rbw stop-agent`.
 - [ ] Use a **test vault or test Items** only. Create:
   - **A**: Login item for a site you can log in to (e.g. a throwaway account), URI with no match mode, with a TOTP secret. Note its password, username and current TOTP code: you'll search the log for them.
   - **B**: a second Login item with a URI on the same base domain as A (two Candidates).
