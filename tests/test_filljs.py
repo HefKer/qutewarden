@@ -259,6 +259,38 @@ def fill_and_submit(page):
     return page.evaluate("window.submissions")
 
 
+def test_submit_sends_the_default_buttons_name_and_value(page):
+    load(page, "login_single.html")
+    [submission] = fill_and_submit(page)
+    assert submission["submitter"] == "submit"
+    assert ["action", "signin"] in submission["data"]
+
+
+def test_submit_uses_a_default_button_linked_from_outside_the_form(page):
+    load(page, "login_single.html")
+    page.evaluate("""() => {
+        const button = document.getElementById("submit");
+        button.setAttribute("form", "login");
+        document.body.prepend(button);
+    }""")
+    [submission] = fill_and_submit(page)
+    assert submission["submitter"] == "submit"
+    assert ["action", "signin"] in submission["data"]
+
+
+def test_submit_uses_the_first_submit_button_in_tree_order(page):
+    load(page, "login_single.html")
+    page.evaluate("""() => {
+        const image = document.createElement("input");
+        image.type = "image";
+        image.id = "image";
+        image.name = "go";
+        document.getElementById("login").prepend(image);
+    }""")
+    [submission] = fill_and_submit(page)
+    assert submission["submitter"] == "image"
+
+
 def test_submit_with_a_disabled_default_button_sends_no_submitter(page):
     load(page, "login_single.html")
     page.evaluate("document.getElementById('submit').disabled = true")
