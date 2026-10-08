@@ -49,7 +49,7 @@ A Fill that happens without the picker, because there is exactly one Candidate. 
 _Avoid_: Autologin, instant fill
 
 **Mismatch fill**:
-A Fill of an Item that isn't a Candidate, chosen from the whole vault. It happens only after the user confirms they've seen each of the Item's URIs, by host or as it is where a host alone could mislead, next to the page's host, with nothing shortened.
+A Fill of an Item that isn't a Candidate, chosen from the whole vault. It happens only after the user confirms they've seen the Item's URIs next to the page's address, all shown host first (or verbatim where that can't be done safely) and never shortened.
 _Avoid_: Force fill, override
 
 **Re-prompt item**:
