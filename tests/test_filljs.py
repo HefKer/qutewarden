@@ -229,6 +229,23 @@ def test_signup_keeps_a_username_the_user_typed(page):
     }
 
 
+def test_signup_without_password_fields_fills_and_submits_nothing(page):
+    load(page, "signup.html")
+    page.evaluate("""() => {
+        for (const el of document.querySelectorAll('input[type=password]')) el.remove();
+        document.getElementById('signup').addEventListener('submit', (e) => {
+            e.preventDefault();
+            document.body.dataset.submitted = 'yes';
+        });
+    }""")
+    run_isolated(page, render_fill_js(
+        expected_origin=ORIGIN, mode="new_password", username="alice",
+        password="QWSECRET-generated", submit=True,
+    ))
+    assert values(page, "username") == {"username": ""}
+    assert page.evaluate("() => document.body.dataset.submitted") is None
+
+
 def test_new_password_without_autocomplete_fills_every_password_field(page):
     load(page, "signup.html")
     page.evaluate("""() => {

@@ -164,9 +164,11 @@ function findSignupUsernameField(root, focused) {
 }
 
 // The new-password fields (spec, `generate` step 3), plus the username field
-// if `a.username` is given and that field is still empty (#16).
+// if `a.username` is given and that field is still empty (#16). Without a
+// new-password field nothing is filled, so nothing is submitted either.
 function fillNewPassword(root, a, focused) {
-  if (a.password == null) return [];
+  const targets = newPasswordFields(root);
+  if (a.password == null || !targets.length) return [];
   const filled = [];
   if (a.username != null) {
     const field = findSignupUsernameField(root, focused);
@@ -175,7 +177,6 @@ function fillNewPassword(root, a, focused) {
       filled.push(field);
     }
   }
-  const targets = newPasswordFields(root);
   for (const el of targets) setValue(el, a.password);
   return [...filled, ...targets];
 }

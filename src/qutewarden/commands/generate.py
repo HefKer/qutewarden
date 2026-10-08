@@ -71,14 +71,14 @@ def _create_item(ctx: Context, page_url: str, origin: str, nonce: str) -> int:
     username = _probed_username(ctx.environ.get("QUTE_HTML"), nonce)
     # A username typed into the picker also goes into the page (#16); a probed
     # one is already there.
-    fill_username = None
+    picker_username = None
     if not username:
-        username = ctx.picker.ask_text("Username")
-        if username is None:
+        answer = ctx.picker.ask_text("Username")
+        if answer is None:
             raise UserCancelled()
-        fill_username = username or None
+        username = picker_username = answer or None
     flow.ensure_unlocked(ctx)
-    item = LoginItem(id="", name=urlsplit(origin).hostname or origin, username=username or None,
+    item = LoginItem(id="", name=urlsplit(origin).hostname or origin, username=username,
                      uris=(ItemUri(origin),))
     password = ctx.generate_password(ctx.config)
     ctx.backend.create_login(name=item.name, username=item.username, uri=origin,
@@ -88,7 +88,7 @@ def _create_item(ctx: Context, page_url: str, origin: str, nonce: str) -> int:
         ctx.qute.message_info(f"saved new password for {flow.describe(item)}; "
                               "not filled, it doesn't match this page")
         return 0
-    _fill(ctx, origin, item, password, username=fill_username, probe_nonce=nonce)
+    _fill(ctx, origin, item, password, username=picker_username, probe_nonce=nonce)
     return 0
 
 
