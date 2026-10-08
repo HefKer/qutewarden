@@ -30,6 +30,10 @@ EMAIL = "alice@example.com"
 CONFIG_SHOW = json.dumps({"email": EMAIL, "sso_id": None, "base_url": None, "identity_url": None,
                           "ui_url": None, "notifications_url": None, "lock_timeout": 3600,
                           "sync_interval": 3600, "pinentry": "pinentry", "client_cert_path": None})
+NO_TTY_PINENTRY_STDERR = ("rbw unlock: failed to read password from pinentry: pinentry error: "
+                          "Inappropriate ioctl for device <Pinentry>\n")
+EXPIRED_LOGIN_STDERR = ("rbw sync: failed to sync database from server: failed to parse JSON: "
+                        "missing field `access_token` at line 1 column 120\n")
 
 FAKE_RBW = r'''#!{python}
 import json, os, sys
@@ -160,12 +164,6 @@ def test_sync_failure_is_backend_error(rbw):
     rbw.respond(["sync"], stderr="rbw sync: failed to sync: network down\n", rc=1)
     with pytest.raises(BackendError, match="network down"):
         rbw.backend().sync()
-
-
-NO_TTY_PINENTRY_STDERR = ("rbw unlock: failed to read password from pinentry: pinentry error: "
-                          "Inappropriate ioctl for device <Pinentry>\n")
-EXPIRED_LOGIN_STDERR = ("rbw sync: failed to sync database from server: failed to parse JSON: "
-                        "missing field `access_token` at line 1 column 120\n")
 
 
 def test_unlock_with_terminal_only_pinentry_asks_for_a_graphical_one(rbw):
@@ -336,6 +334,16 @@ def test_get_secrets_with_terminal_only_pinentry_asks_for_a_graphical_one(rbw):
     assert "rbw config set pinentry pinentry-qt" in excinfo.value.hint
     assert SECRET_MARKER not in str(excinfo.value)
     assert "Inappropriate ioctl" not in str(excinfo.value)
+
+
+def test_get_secrets_with_rejected_refresh_token_asks_to_log_in_again(rbw):
+    stderr = EXPIRED_LOGIN_STDERR.replace("rbw sync:", f"rbw get: {SECRET_MARKER}:")
+    rbw.respond(["get", "--raw", "--", BANK_ID], stdout=f"{SECRET_MARKER}-partial",
+                stderr=stderr, rc=1)
+    with pytest.raises(NotLoggedIn) as excinfo:
+        rbw.backend().get_secrets(BANK_ID)
+    assert "rbw purge" in excinfo.value.hint
+    assert SECRET_MARKER not in str(excinfo.value)
 
 
 def test_get_secrets_with_cancelled_pinentry_is_still_rbw_get_failed(rbw):
