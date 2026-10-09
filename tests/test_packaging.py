@@ -1,7 +1,8 @@
-"""The built wheel is what the Nix package installs: it must ship the fill JS."""
+"""The built wheel is what the Nix package installs: it must ship the package data."""
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 import zipfile
@@ -28,6 +29,14 @@ def wheel(tmp_path_factory: pytest.TempPathFactory) -> Iterator[zipfile.ZipFile]
 def test_wheel_ships_fill_js_as_package_data(wheel: zipfile.ZipFile) -> None:
     body = wheel.read("qutewarden/js/fill.js").decode()
     assert "function qutewardenFill" in body
+
+
+def test_wheel_ships_the_global_equivalent_domains_with_their_source_and_licence(
+        wheel: zipfile.ZipFile) -> None:
+    data = json.loads(wheel.read("qutewarden/equivalent_domains.json"))
+    assert data["source"].startswith("https://github.com/bitwarden/server/blob/")
+    assert "AGPL-3.0" in data["license"]
+    assert ["youtube.com", "google.com", "gmail.com"] in data["groups"]
 
 
 def test_wheel_installs_qutewarden_command(wheel: zipfile.ZipFile) -> None:

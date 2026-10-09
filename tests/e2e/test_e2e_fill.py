@@ -47,6 +47,19 @@ def test_fill_on_a_locked_vault_asks_for_the_master_password_before_the_picker(
     assert page.wait_fields(_filled, "the fill")["password"] == vault.b.password
 
 
+def test_an_item_is_offered_on_an_equivalent_domain_with_its_domain_and_not_auto_filled(
+        qb: Qutebrowser, pages: PageServer, picker: Picker, vault: SeededVault, unlocked: None):
+    # matching.equivalent_domains in the e2e config groups equiv-a.test with equiv-b.test.
+    page = qb.open(pages, "http://login.equiv-b.test/login_single.html")
+    run = qb.spawn("fill", "--auto-fill")
+    line = f"{vault.equivalent.line} (equiv-a.test)"
+    picker.choose(line, expect_lines=[line])
+    run.wait()
+    fields = page.wait_fields(_filled, "the password to be filled")
+    assert (fields["username"], fields["password"]) == ("ella", vault.equivalent.password)
+    assert run.messages() == [("INFO", "qutewarden: filling Equiv E (ella)")]
+
+
 def test_cancelling_the_picker_fills_nothing(
         qb: Qutebrowser, pages: PageServer, picker: Picker, unlocked: None):
     page = qb.open(pages, LOGIN)

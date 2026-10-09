@@ -12,11 +12,15 @@ from fakes.picker import FakePicker
 
 from qutewarden import cli
 from qutewarden.backend.fake import FakeBackend
+from qutewarden.model import ItemUri, LoginItem
 from qutewarden.qute import Qute
 
 GITHUB = "https://github.com/login"
 EXAMPLE = "https://example.com/signin"
 GENERATED = "QWSECRET-generated"
+YOUTUBE = "https://www.youtube.com/signin"
+GOOGLE = LoginItem(id="google", name="Google", username="me@gmail.com",
+                   uris=(ItemUri("https://google.com"),))
 
 
 @pytest.fixture
@@ -96,11 +100,23 @@ def test_the_password_comes_from_the_generator_settings(generate, ctx, fake_qute
     assert seen == [9]
 
 
+def test_one_candidate_through_equivalent_domains_names_its_domain_in_the_question(generate):
+    picker = FakePicker()
+    assert generate(url=YOUTUBE, backend=FakeBackend([GOOGLE]), picker=picker) == 0
+    assert picker.prompts == ["Replace password for me@gmail.com on Google (google.com)?"]
+
+
 # --- Several Candidates -------------------------------------------------------
 
 def test_several_candidates_offer_each_item_and_a_new_item(generate, fake_picker):
     generate()
     assert fake_picker.lines[0] == ["GitHub — alice", "GitHub (work) — alice-work", "new Item"]
+
+
+def test_candidates_through_equivalent_domains_show_their_domain(generate, fake_picker):
+    youtube = LoginItem(id="youtube", name="YouTube", uris=(ItemUri("https://youtube.com"),))
+    assert generate(url=YOUTUBE, backend=FakeBackend([GOOGLE, youtube])) == 0
+    assert fake_picker.lines == [["Google — me@gmail.com (google.com)", "YouTube", "new Item"]]
 
 
 def test_the_picked_candidate_is_updated_and_filled(generate, fake_qutebrowser):

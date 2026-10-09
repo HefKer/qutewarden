@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+from pathlib import Path
 
 import pytest
 from fakes.picker import FakePicker
@@ -163,3 +164,39 @@ def test_a_non_http_page_is_refused_before_any_secret_is_fetched(fill, fake_qute
     assert fake_qutebrowser.js == []
     [(level, _)] = fake_qutebrowser.messages
     assert level == "error"
+
+
+YOUTUBE = "https://www.youtube.com/signin"
+GOOGLE = LoginItem(id="google", name="Google", username="me@gmail.com",
+                   uris=(ItemUri("https://accounts.google.com"),))
+YOUTUBE_ITEM = LoginItem(id="youtube", name="YouTube", username="me",
+                         uris=(ItemUri("https://youtube.com"),))
+
+
+def test_a_candidate_through_equivalent_domains_shows_the_domain_it_matched(
+        fill, fake_picker):
+    assert fill(url=YOUTUBE, backend=FakeBackend([GOOGLE, YOUTUBE_ITEM])) == 0
+    assert fake_picker.lines == [["Google — me@gmail.com (google.com)", "YouTube — me"]]
+
+
+def test_a_single_candidate_through_equivalent_domains_is_never_auto_filled(
+        fill, fake_picker, fake_qutebrowser):
+    assert fill("--auto-fill", url=YOUTUBE, backend=FakeBackend([GOOGLE])) == 0
+    assert fake_picker.lines == [["Google — me@gmail.com (google.com)"]]
+    [js] = fake_qutebrowser.js
+    assert f'"password": "{fake_password("google")}"' in js
+
+
+def test_global_equivalent_domains_can_be_turned_off(fill, fake_picker, fake_qutebrowser):
+    assert fill("--no-matching-global-equivalent-domains", url=YOUTUBE,
+                backend=FakeBackend([GOOGLE])) == 1
+    assert fake_picker.lines == []
+    assert fake_qutebrowser.js == []
+
+
+def test_the_users_own_equivalent_domains_come_from_the_config(ctx, fill, fake_picker):
+    config = Path(ctx.environ["XDG_CONFIG_HOME"]) / "qutewarden" / "config.toml"
+    config.parent.mkdir(parents=True)
+    config.write_text('[matching]\nequivalent_domains = [["example.com", "example.net"]]\n')
+    assert fill(url="https://example.net/") == 0
+    assert fake_picker.lines == [["Example — bob (example.com)"]]
