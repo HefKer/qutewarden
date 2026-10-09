@@ -44,9 +44,13 @@
           ];
 
           nativeCheckInputs = [ pkgs.python3Packages.pytestCheckHook ];
-          # Browser tests need Chromium; the packaging test builds a wheel itself.
+          # Browser tests need Chromium; the packaging test builds a wheel itself;
+          # the e2e suite (ADR-0007) needs the dev shell.
           disabledTestMarks = [ "browser" ];
-          disabledTestPaths = [ "tests/test_packaging.py" ];
+          disabledTestPaths = [
+            "tests/test_packaging.py"
+            "tests/e2e"
+          ];
           pythonImportsCheck = [ "qutewarden" ];
 
           # The clipboard clearer is started as `sys.executable -m
