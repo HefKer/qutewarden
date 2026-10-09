@@ -13,3 +13,14 @@ jobs:
       - uses: cachix/install-nix-action@v31
       - run: nix develop -c scripts/check
       - run: nix build
+
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+      # Chromium's sandbox needs unprivileged user namespaces, which Ubuntu
+      # restricts. If lifting that ever stops working, set QW_E2E_NO_SANDBOX=1
+      # (qt.chromium.sandboxing = disable-all, CI only).
+      - run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - run: nix develop -c scripts/check --e2e -m e2e

@@ -71,8 +71,17 @@
               p.tldextract
               p.playwright
               p.hatchling
+              # e2e seed script: Bitwarden's client-side crypto (ADR-0007).
+              p.cryptography
             ]))
             pkgs.rbw
+            # e2e suite (ADR-0007): real browser, server and clipboards.
+            pkgs.qutebrowser
+            pkgs.vaultwarden
+            pkgs.sway
+            pkgs.wl-clipboard
+            pkgs.xorg-server
+            pkgs.xclip
             pkgs.ruff
             pkgs.pyright
             # Runs qutewarden from this checkout's src/, against your real rbw.

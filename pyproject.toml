@@ -21,13 +21,14 @@ packages = ["src/qutewarden"]
 testpaths = ["tests"]
 pythonpath = ["src"]
 addopts = "-ra --strict-markers"
-markers = ["browser: needs playwright + chromium (deselect with -m 'not browser')"]
+markers = [
+  "browser: needs playwright + chromium (deselect with -m 'not browser')",
+  "e2e: real qutebrowser and rbw against a local Vaultwarden; runs only with --e2e (ADR-0007)",
+]
 
 [tool.ruff]
 target-version = "py311"
 line-length = 100
-# Throwaway spike scripts; the e2e harness ticket deletes them (docs/spec-v2.md).
-extend-exclude = ["docs/e2e-spike"]
 
 [tool.ruff.lint]
 extend-select = ["E501"]

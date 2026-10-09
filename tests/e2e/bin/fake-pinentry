@@ -1,0 +1,48 @@
+#!/usr/bin/env python3
+"""Scripted Assuan pinentry for the e2e suite (harness.Pinentry drives it).
+
+Logs each GETPIN (with the description, prompt and error rbw set) to
+$QW_E2E_PINENTRY_DIR/calls.jsonl and answers it as $QW_E2E_PINENTRY_DIR/mode
+says: "ok" (the master password from ./password), "cancel" or "wrong".
+"""
+
+import json
+import os
+import sys
+from pathlib import Path
+
+DIR = Path(os.environ["QW_E2E_PINENTRY_DIR"])
+
+
+def say(line):
+    sys.stdout.write(line + "\n")
+    sys.stdout.flush()
+
+
+def unescape(text):
+    return text.replace("%0A", "\n").replace("%25", "%")
+
+
+say("OK fake pinentry")
+state = {}
+for line in sys.stdin:
+    command, _, arg = line.rstrip("\n").partition(" ")
+    if command in ("SETDESC", "SETPROMPT", "SETERROR", "SETTITLE"):
+        state[command[3:].lower()] = unescape(arg)
+        say("OK")
+    elif command == "GETPIN":
+        mode = (DIR / "mode").read_text().strip()
+        with open(DIR / "calls.jsonl", "a") as log:
+            log.write(json.dumps({**state, "mode": mode}) + "\n")
+        state.pop("error", None)
+        if mode == "cancel":
+            say("ERR 83886179 Operation cancelled <Pinentry>")
+        else:
+            pin = (DIR / "password").read_text() if mode == "ok" else "wrong-master-password"
+            say("D " + pin)
+            say("OK")
+    elif command == "BYE":
+        say("OK closing connection")
+        break
+    else:
+        say("OK")

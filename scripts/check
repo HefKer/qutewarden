@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Lint, typecheck and the full test suite. Run in the dev shell:
 #   nix develop -c scripts/check
-# Extra arguments go to pytest (e.g. `-m "not browser"`, `-x`).
+# Extra arguments go to pytest (e.g. `-m "not browser"`, `-x`). `--e2e` also
+# runs the e2e suite in tests/e2e (ADR-0007); `--e2e -m e2e` runs only that.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 ruff check .
