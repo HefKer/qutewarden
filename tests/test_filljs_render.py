@@ -2,7 +2,8 @@
 
 import pytest
 
-from qutewarden.filljs import render_fill_js, render_probe_js
+from qutewarden.filljs import render_card_fill_js, render_fill_js, render_probe_js
+from qutewarden.model import CardSecrets
 
 ORIGIN = "https://login.example.test"
 
@@ -35,3 +36,22 @@ def test_probe_script_has_no_value_slots():
     assert '"password": null' in js
     assert '"totp": null' in js
     assert '"username": null' in js
+
+
+@pytest.mark.parametrize(("month", "year", "expected"), [
+    ("3", "2030", '"expMonth": "03", "expYear": "2030"'),
+    ("12", "31", '"expMonth": "12", "expYear": "2031"'),
+    (" 07 ", "2029", '"expMonth": "07", "expYear": "2029"'),
+    ("13", "203", '"expMonth": null, "expYear": null'),
+    (None, "", '"expMonth": null, "expYear": null'),
+])
+def test_card_expiry_is_passed_as_2_digit_month_and_4_digit_year(month, year, expected):
+    js = render_card_fill_js(expected_origin=ORIGIN,
+                             card=CardSecrets(exp_month=month, exp_year=year))
+    assert expected in js
+
+
+def test_card_script_never_asks_to_submit():
+    js = render_card_fill_js(expected_origin=ORIGIN, card=CardSecrets(number="4242"))
+    assert '"mode": "card"' in js
+    assert '"submit": false' in js

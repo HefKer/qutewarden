@@ -1,4 +1,4 @@
-"""Steps shared by `fill`, `totp`, `generate` and `vault`.
+"""Steps shared by the subcommands that fill: `fill`, `totp`, `generate`, `vault`, `card`.
 
 ``select_candidate`` is steps 1–3 of `fill` in the spec: read the page URL,
 unlock, work out the Candidates and pick one. ``fill_login`` sends the chosen
@@ -15,7 +15,7 @@ from qutewarden.context import Context
 from qutewarden.errors import QutewardenError, UserCancelled
 from qutewarden.filljs import render_fill_js
 from qutewarden.fillroute import send_js
-from qutewarden.model import LoginItem
+from qutewarden.model import LoginItem, LoginSecrets
 
 if TYPE_CHECKING:
     from qutewarden.clipboard import Clipboard
@@ -45,10 +45,16 @@ def select_candidate(ctx: Context, *, prompt: str = "Fill") -> Selection:
     if len(found) == 1 and ctx.config.auto_fill and found[0].equivalent_domain is None:
         # Never Auto-fill through Equivalent domains (ADR-0006).
         return Selection(page_url, origin, found[0].item)
-    index = ctx.picker.choose(prompt, [candidate_line(c) for c in found])
+    index = pick(ctx, prompt, [candidate_line(c) for c in found])
+    return Selection(page_url, origin, found[index].item)
+
+
+def pick(ctx: Context, prompt: str, lines: list[str]) -> int:
+    """The index of the line the user picked; raises UserCancelled if dismissed."""
+    index = ctx.picker.choose(prompt, lines)
     if index is None:
         raise UserCancelled()
-    return Selection(page_url, origin, found[index].item)
+    return index
 
 
 def ensure_unlocked(ctx: Context) -> None:
@@ -98,11 +104,19 @@ def candidate_line(candidate: match.Candidate) -> str:
 def fill_login(ctx: Context, selection: Selection) -> None:
     """Fill the chosen Item; the script decides between login and OTP in the page."""
     item = selection.item
-    secrets = ctx.backend.get_secrets(item.id)
+    secrets = login_secrets(ctx, item)
     js = render_fill_js(expected_origin=selection.origin, mode="auto",
                         username=item.username, password=secrets.password,
                         totp=secrets.totp, submit=ctx.config.submit_after_fill)
     send_fill(ctx, js, f"filling {describe(item)}")
+
+
+def login_secrets(ctx: Context, item: LoginItem) -> LoginSecrets:
+    """``get_secrets`` for a Login item; an error if the Vault says it's another type."""
+    secrets = ctx.backend.get_secrets(item.id)
+    if not isinstance(secrets, LoginSecrets):
+        raise QutewardenError(f"{describe(item)} isn't a Login item")
+    return secrets
 
 
 def send_fill(ctx: Context, js: str, message: str) -> None:

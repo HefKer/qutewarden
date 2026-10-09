@@ -16,6 +16,8 @@ import re
 from importlib import resources
 from typing import Literal, get_args
 
+from qutewarden.model import CardSecrets
+
 FillMode = Literal["auto", "login", "otp", "new_password"]
 
 _FILL_MODES = frozenset(get_args(FillMode))
@@ -59,6 +61,54 @@ def render_fill_js(
         "submit": submit,
         "probeNonce": probe_nonce,
     })
+
+
+def render_card_fill_js(*, expected_origin: str, card: CardSecrets) -> str:
+    """Return the script that fills a Card item into the page's payment form.
+
+    It never submits the form (ADR-0005). The expiry is passed as a 2-digit
+    month and a 4-digit year; the script formats it for each field. Values the
+    Item doesn't have (or can't be read, like a month of 13) are null, and the
+    script leaves their fields alone.
+    """
+    given, family = _split_name(card.cardholder_name)
+    return _render({
+        "origin": expected_origin,
+        "mode": "card",
+        "card": {
+            "name": card.cardholder_name or None,
+            "givenName": given,
+            "familyName": family,
+            "number": card.number or None,
+            "brand": card.brand or None,
+            "expMonth": _month(card.exp_month),
+            "expYear": _year(card.exp_year),
+            "code": card.code or None,
+        },
+        "submit": False,
+    })
+
+
+def _split_name(name: str | None) -> tuple[str | None, str | None]:
+    """(given name, family name): the last word is the family name."""
+    words = (name or "").split()
+    if len(words) < 2:
+        return (words[0] if words else None), None
+    return " ".join(words[:-1]), words[-1]
+
+
+def _month(text: str | None) -> str | None:
+    text = (text or "").strip()
+    if not text.isdigit() or not 1 <= int(text) <= 12:
+        return None
+    return f"{int(text):02d}"
+
+
+def _year(text: str | None) -> str | None:
+    text = (text or "").strip()
+    if not text.isdigit() or len(text) not in (2, 4):
+        return None
+    return text if len(text) == 4 else f"20{text}"
 
 
 def render_probe_js(*, expected_origin: str, nonce: str) -> str:

@@ -1,0 +1,17 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Checkout (split fields)</title></head>
+<body>
+  <form id="checkout" action="/order" method="post">
+    <input type="text" name="given" id="cc-given-name" autocomplete="cc-given-name" placeholder="First name on card">
+    <input type="text" name="family" id="cc-family-name" autocomplete="cc-family-name" placeholder="Last name on card">
+    <input type="text" name="number" id="cc-number" autocomplete="cc-number">
+    <input type="text" name="month" id="cc-exp-month" autocomplete="cc-exp-month" placeholder="MM" maxlength="2">
+    <input type="text" name="year" id="cc-exp-year" autocomplete="cc-exp-year" placeholder="YY" maxlength="2">
+    <input type="text" name="year4" id="cc-exp-year-4" autocomplete="billing cc-exp-year" placeholder="YYYY">
+    <input type="text" name="cvc" id="cc-csc" autocomplete="cc-csc">
+    <input type="text" name="brand" id="cc-type" autocomplete="cc-type">
+    <button type="submit">Pay</button>
+  </form>
+</body>
+</html>

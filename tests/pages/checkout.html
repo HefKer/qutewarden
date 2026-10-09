@@ -1,0 +1,31 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Checkout</title></head>
+<body>
+  <form id="checkout" action="/order" method="post">
+    <fieldset>
+      <legend>Shipping</legend>
+      <label>First name <input type="text" name="first" id="first" autocomplete="shipping given-name"></label>
+      <label>Last name <input type="text" name="last" id="last" autocomplete="shipping family-name"></label>
+      <label>Email <input type="email" name="email" id="email" autocomplete="email"></label>
+      <label>Phone <input type="tel" name="phone" id="phone" autocomplete="tel"></label>
+    </fieldset>
+    <fieldset>
+      <legend>Payment</legend>
+      <label>Name on card <input type="text" name="ccname" id="cc-name" autocomplete="cc-name"></label>
+      <label>Card number <input type="tel" name="ccnumber" id="cc-number" autocomplete="cc-number" inputmode="numeric"></label>
+      <label>Expiry <input type="text" name="ccexp" id="cc-exp" autocomplete="cc-exp" placeholder="MM/YY" maxlength="5"></label>
+      <label>Security code <input type="password" name="cccsc" id="cc-csc" autocomplete="cc-csc" maxlength="4"></label>
+    </fieldset>
+    <label>Promo code <input type="text" name="promo" id="promo"></label>
+    <button type="submit" id="pay">Pay now</button>
+  </form>
+  <script>
+    window.submitted = 0;
+    document.getElementById("checkout").addEventListener("submit", (e) => {
+      e.preventDefault();
+      window.submitted += 1;
+    });
+  </script>
+</body>
+</html>

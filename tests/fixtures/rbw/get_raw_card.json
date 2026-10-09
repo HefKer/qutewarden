@@ -1,0 +1,16 @@
+{
+  "id": "e5f7a9b1-3c5d-4e7f-8a9b-1c3d5e7f9a0b",
+  "folder": null,
+  "name": "Card",
+  "data": {
+    "cardholder_name": "Alice Example",
+    "number": "QWSECRET-rbw-4111 1111 1111 1234",
+    "brand": "Visa",
+    "exp_month": "3",
+    "exp_year": "2030",
+    "code": "QWSECRET-rbw-code"
+  },
+  "fields": [],
+  "notes": null,
+  "history": []
+}

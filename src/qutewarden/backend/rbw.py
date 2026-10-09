@@ -7,8 +7,12 @@ stdin data or the output of secret-returning commands.
 
 Re-prompt items make rbw ask for the master password on every decryption, so:
 ``list_logins`` never decrypts an Item (``rbw list --raw`` plus the match types
-read from rbw's local db file), and ``get_secrets`` makes exactly one
-``rbw get --raw`` call and computes the TOTP code locally.
+read from rbw's local db file), ``list_cards`` decrypts only Card items that
+aren't Re-prompt items (for their brand and last 4 digits), and ``get_secrets``
+makes exactly one ``rbw get --raw`` call and computes the TOTP code locally.
+
+``rbw get --raw`` doesn't say which item type it printed, so the type always
+comes from the db file (ADR-0003, amendment for v2).
 """
 
 from __future__ import annotations
@@ -18,6 +22,7 @@ import os
 import re
 import time
 from collections.abc import Callable, Mapping
+from dataclasses import dataclass, fields
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -32,7 +37,16 @@ from qutewarden.backend.base import (
     SaveFailed,
     UnlockFailed,
 )
-from qutewarden.model import ItemUri, LoginItem, MatchMode, Secrets, Status
+from qutewarden.model import (
+    CardItem,
+    CardSecrets,
+    ItemSecrets,
+    ItemUri,
+    LoginItem,
+    LoginSecrets,
+    MatchMode,
+    Status,
+)
 from qutewarden.totp import totp_code
 
 MIN_VERSION = (1, 15)
@@ -57,6 +71,16 @@ _MATCH_TYPES = {
     4: MatchMode.REGULAR_EXPRESSION,
     5: MatchMode.NEVER,
 }
+
+
+@dataclass(frozen=True)
+class _DbEntry:
+    """The non-secret, unencrypted bits of one Item in rbw's db file."""
+
+    type: str  # rbw's item type: "Login", "Card", "Identity", "SecureNote", "SshKey"
+    reprompt: bool
+    has_totp: bool = False
+    match_types: tuple[object, ...] = ()  # one per URI, Login items only
 
 
 class RbwBackend(Backend):
@@ -105,8 +129,8 @@ class RbwBackend(Backend):
                 continue
             uris = [u for u in entry.get("uris") or [] if isinstance(u, str)]
             info = db.get(entry["id"])
-            if info is not None and len(info["match_types"]) == len(uris):
-                modes = [_match_mode(m) for m in info["match_types"]]
+            if info is not None and len(info.match_types) == len(uris):
+                modes = [_match_mode(m) for m in info.match_types]
             else:  # rbw dropped an undecryptable URI: never guess a looser mode
                 modes = [MatchMode.NEVER] * len(uris)
             logins.append(LoginItem(
@@ -114,13 +138,39 @@ class RbwBackend(Backend):
                 name=entry.get("name") or "",
                 username=entry.get("user") or None,
                 uris=tuple(ItemUri(uri, mode) for uri, mode in zip(uris, modes)),
-                has_totp=bool(info and info["has_totp"]),
-                reprompt=bool(info and info["reprompt"]),
+                has_totp=bool(info and info.has_totp),
+                reprompt=bool(info and info.reprompt),
             ))
         return logins
 
-    def get_secrets(self, item_id: str) -> Secrets:
-        data = self._get_raw(item_id).get("data") or {}
+    def list_cards(self) -> list[CardItem]:
+        listed = _parse_json(self._run_checked(["list", "--raw"]).stdout, "rbw list")
+        db = self._read_db()
+        cards = []
+        for entry in listed:
+            info = db.get(entry.get("id"))
+            if info is None or info.type != "Card":
+                continue
+            card = CardItem(id=entry["id"], name=entry.get("name") or "", reprompt=info.reprompt)
+            if not info.reprompt:  # a Re-prompt item would ask for the master password
+                data = self._get_data(card.id)
+                card = CardItem(id=card.id, name=card.name, brand=_text(data.get("brand")),
+                                last4=_last4(_text(data.get("number"))))
+            cards.append(card)
+        return cards
+
+    def get_secrets(self, item_id: str) -> ItemSecrets:
+        info = self._read_db().get(item_id)
+        if info is None:
+            raise ItemNotFound("rbw has no item with that id", hint=_SYNC_HINT)
+        if info.type == "Login":
+            return self._login_secrets(self._get_data(item_id))
+        if info.type == "Card":
+            data = self._get_data(item_id)
+            return CardSecrets(**{f.name: _text(data.get(f.name)) for f in fields(CardSecrets)})
+        raise BackendError("this item type can't be filled")
+
+    def _login_secrets(self, data: dict[str, Any]) -> LoginSecrets:
         seed = data.get("totp")
         code = None
         if seed:
@@ -128,7 +178,7 @@ class RbwBackend(Backend):
                 code = totp_code(seed, now=self._clock())
             except ValueError:
                 raise BackendError("this item's TOTP secret isn't valid") from None
-        return Secrets(password=data.get("password"), totp=code)
+        return LoginSecrets(password=data.get("password"), totp=code)
 
     # --- writing ----------------------------------------------------------------
 
@@ -207,6 +257,11 @@ class RbwBackend(Backend):
             raise BackendError("couldn't parse rbw get output")
         return item
 
+    def _get_data(self, item_id: str) -> dict[str, Any]:
+        """The Item's values from one ``rbw get --raw`` (keys as rbw names them)."""
+        data = self._get_raw(item_id).get("data")
+        return data if isinstance(data, dict) else {}
+
     def _db_path(self) -> Path:
         """rbw's local db file: <cache>/<profile>/<server>:<email>.json (rbw src/dirs.rs)."""
         config = _parse_json(self._run_checked(["config", "show"]).stdout, "rbw config show")
@@ -223,8 +278,8 @@ class RbwBackend(Backend):
         profile = self._environ.get("RBW_PROFILE", "")
         return Path(base) / (f"rbw-{profile}" if profile else "rbw")
 
-    def _read_db(self) -> dict[str, dict[str, Any]]:
-        """Read only the non-secret, unencrypted bits we need: id -> reprompt/totp/match types.
+    def _read_db(self) -> dict[str, _DbEntry]:
+        """Read only the non-secret, unencrypted bits we need: id -> type, reprompt, URI modes.
 
         The file is opened read-only and never written. Everything else in it
         (tokens, encrypted fields) is dropped right away.
@@ -237,17 +292,23 @@ class RbwBackend(Backend):
             raise BackendError("can't read rbw's local db file", hint=_SYNC_HINT) from None
         db = {}
         for entry in entries:
+            # rbw's Data enum: {"Login": {...}}, {"Card": {...}}, ... or "SecureNote".
             data = entry.get("data")
-            login = data.get("Login") if isinstance(data, dict) else None
-            if not isinstance(login, dict):
+            if isinstance(data, dict) and len(data) == 1:
+                [(item_type, values)] = data.items()
+            elif isinstance(data, str):
+                item_type, values = data, None
+            else:
                 continue
-            db[entry.get("id")] = {
-                "reprompt": entry.get("master_password_reprompt") not in (None, 0),
-                "has_totp": login.get("totp") is not None,
-                # Old dbs store bare URI strings, which rbw treats as match_type None.
-                "match_types": [u.get("match_type") if isinstance(u, dict) else None
-                                for u in login.get("uris") or []],
-            }
+            reprompt = entry.get("master_password_reprompt") not in (None, 0)
+            if item_type == "Login" and isinstance(values, dict):
+                db[entry.get("id")] = _DbEntry(
+                    "Login", reprompt, has_totp=values.get("totp") is not None,
+                    # Old dbs store bare URI strings, which rbw treats as match_type None.
+                    match_types=tuple(u.get("match_type") if isinstance(u, dict) else None
+                                      for u in values.get("uris") or []))
+            else:
+                db[entry.get("id")] = _DbEntry(str(item_type), reprompt)
         return db
 
 
@@ -268,6 +329,16 @@ def _match_mode(match_type: object) -> MatchMode | None:
     if not isinstance(match_type, int):
         return MatchMode.NEVER  # unknown: never match
     return _MATCH_TYPES.get(match_type, MatchMode.NEVER)
+
+
+def _text(value: object) -> str | None:
+    return value if isinstance(value, str) and value else None
+
+
+def _last4(number: str | None) -> str | None:
+    """The last 4 digits of a card number (Security rule 6 allows no more), if it has 4."""
+    digits = re.sub(r"\D", "", number or "")
+    return digits[-4:] if len(digits) >= 4 else None
 
 
 def _check_password(password: str) -> None:

@@ -81,10 +81,16 @@ function findLoginPasswordField(root) {
     || fields[0] || null;
 }
 
+function isSelect(el) {
+  const view = viewOf(el);
+  return Boolean(view) && el instanceof view.HTMLSelectElement;
+}
+
 // Set through the prototype's setter so framework value trackers (React)
 // notice the change, then fire bubbling input + change events.
 function setValue(el, value) {
-  const proto = viewOf(el).HTMLInputElement.prototype;
+  const view = viewOf(el);
+  const proto = isSelect(el) ? view.HTMLSelectElement.prototype : view.HTMLInputElement.prototype;
   Object.getOwnPropertyDescriptor(proto, "value").set.call(el, value);
   el.dispatchEvent(new Event("input", { bubbles: true }));
   el.dispatchEvent(new Event("change", { bubbles: true }));
@@ -98,14 +104,18 @@ function focusedInput(doc) {
   return inputType(el) === "password" || isTextish(el) || looksLikeOtp(el) ? el : null;
 }
 
+function loginFields(root) {
+  return usableInputs(root).filter((el) => inputType(el) === "password" || isTextish(el));
+}
+
 // Where to look for fields: the focused input's <form>, or (no form) its
-// nearest ancestor that holds another fillable field; else the document.
-function scopeFor(doc, focused) {
+// nearest ancestor that holds another field (`fields(root)` lists them);
+// else the document.
+function scopeFor(doc, focused, fields = loginFields) {
   if (!focused) return doc;
   if (focused.form) return focused.form;
-  const isField = (el) => el !== focused && (inputType(el) === "password" || isTextish(el));
   for (let el = focused.parentElement; el; el = el.parentElement) {
-    if (usableInputs(el).some(isField)) return el;
+    if (fields(el).some((field) => field !== focused)) return el;
   }
   return doc;
 }
@@ -198,6 +208,182 @@ function fillAuto(root, a, focused) {
   if (passwordFields(root).length) return fillLogin(root, a, focused);
   if (findOtpField(root)) return fillOtp(root, a, focused);
   return fillLogin(root, a, focused);
+}
+
+// --- Fields by kind (Card items) ---------------------------------------------
+//
+// A kind is the autocomplete token that names a field ("cc-number"). A field
+// whose autocomplete names a kind is that kind; a field with no autocomplete
+// token is matched by its name, id, label and placeholder against an ordered
+// list of [pattern, kind], the first match deciding. Each kind gives the value
+// for a field (`value(el, v)`, null = leave the field alone) and, if plain
+// equality isn't enough, which <select> option fits (`option(text, v)` on the
+// option's normalised value or text).
+
+const CONTROL_TYPES = ["text", "email", "tel", "number", "password", "search", ""];
+
+// Autocomplete tokens that qualify a kind rather than name one.
+const NOT_A_KIND = /^(on|off|section-.*|shipping|billing|home|work|mobile|fax|pager)?$/;
+
+function isFillableControl(el) {
+  if (isSelect(el)) {
+    return !el.disabled && el.getClientRects().length > 0
+      && viewOf(el).getComputedStyle(el).visibility !== "hidden";
+  }
+  return isUsable(el) && CONTROL_TYPES.includes(inputType(el));
+}
+
+function fillableControls(root) {
+  return Array.from(root.querySelectorAll("input, select")).filter(isFillableControl);
+}
+
+// The focused input or select, if it is one a kind could fill.
+function focusedControl(doc) {
+  const el = doc.activeElement;
+  return el && isFillableControl(el) ? el : null;
+}
+
+// The text of the field's labels, without that of controls inside them
+// (a <select> in its <label> would add every option).
+function labelText(el) {
+  return Array.from(el.labels || []).map((label) => {
+    const copy = label.cloneNode(true);
+    for (const inner of copy.querySelectorAll("input, select, textarea, button")) inner.remove();
+    return copy.textContent;
+  }).join(" ");
+}
+
+function describeField(el) {
+  return [el.name, el.id, labelText(el), el.getAttribute("placeholder") || ""].join(" ");
+}
+
+function normalise(text) {
+  return String(text == null ? "" : text).toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function kindOf(el, kinds, words) {
+  const tokens = autocompleteTokens(el).filter((t) => !NOT_A_KIND.test(t));
+  if (tokens.length) return tokens.find((t) => kinds.has(t)) || null;
+  const text = describeField(el);
+  const hit = words.find(([pattern]) => pattern.test(text));
+  return hit ? hit[1] : null;
+}
+
+function selectOption(el, kind, v) {
+  let fits = kind.option && ((text) => kind.option(text, v));
+  if (!fits) {
+    const wanted = normalise(kind.value(el, v));
+    fits = (text) => wanted !== "" && text === wanted;
+  }
+  const option = Array.from(el.options).find(
+    (o) => !o.disabled && (fits(normalise(o.value)) || fits(normalise(o.text))));
+  if (!option) return false;
+  setValue(el, option.value);
+  return true;
+}
+
+// Fill every field in root that has a kind in `kinds` (a Map) and a value in
+// `v`; return the fields filled.
+function fillKinds(root, kinds, words, v) {
+  const filled = [];
+  for (const el of fillableControls(root)) {
+    const name = kindOf(el, kinds, words);
+    if (!name) continue;
+    const kind = kinds.get(name);
+    if (isSelect(el)) {
+      if (selectOption(el, kind, v)) filled.push(el);
+      continue;
+    }
+    const value = kind.value(el, v);
+    if (value == null) continue;
+    setValue(el, value);
+    filled.push(el);
+  }
+  return filled;
+}
+
+// --- Card items ----------------------------------------------------------------
+//
+// `v` is `a.card`: name, givenName, familyName, number, brand, code, and the
+// expiry as expMonth ("03") and expYear ("2030"). Missing values are null.
+
+const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+
+const BRAND_NAMES = {
+  amex: ["americanexpress"],
+  dinersclub: ["diners"],
+  mastercard: ["mc"],
+  unionpay: ["chinaunionpay"],
+};
+
+// A single expiry field asks for a 4-digit year through its placeholder,
+// else its pattern, else a maxlength of at least 7 ("MM/YYYY").
+function wantsLongYear(el) {
+  const placeholder = el.getAttribute("placeholder") || "";
+  if (/yyyy|\d{4}/i.test(placeholder)) return true;
+  if (/yy|\d\d/i.test(placeholder)) return false;
+  const pattern = el.getAttribute("pattern") || "";
+  if (pattern) return /\{4\}|yyyy|\\d\\d\\d\\d/i.test(pattern);
+  return el.maxLength >= 7;
+}
+
+function wantsShortYear(el) {
+  return el.maxLength === 2 || /^\s*yy\s*$/i.test(el.getAttribute("placeholder") || "");
+}
+
+function shortYear(year) {
+  return year.slice(-2);
+}
+
+const CARD_KINDS = new Map([
+  ["cc-name", { value: (el, v) => v.name }],
+  ["cc-given-name", { value: (el, v) => v.givenName }],
+  ["cc-family-name", { value: (el, v) => v.familyName }],
+  ["cc-number", { value: (el, v) => v.number }],
+  ["cc-csc", { value: (el, v) => v.code }],
+  ["cc-type", {
+    value: (el, v) => v.brand,
+    option: (text, v) => {
+      if (v.brand == null || text === "") return false;
+      const brand = normalise(v.brand);
+      return text === brand || (BRAND_NAMES[brand] || []).includes(text);
+    },
+  }],
+  ["cc-exp", {
+    value: (el, v) => (v.expMonth == null || v.expYear == null ? null
+      : `${v.expMonth}/${wantsLongYear(el) ? v.expYear : shortYear(v.expYear)}`),
+  }],
+  ["cc-exp-month", {
+    value: (el, v) => v.expMonth,
+    option: (text, v) => v.expMonth != null && (
+      (/^\d/.test(text) && parseInt(text, 10) === Number(v.expMonth))
+      || text.startsWith(MONTHS[Number(v.expMonth) - 1])),
+  }],
+  ["cc-exp-year", {
+    value: (el, v) => (v.expYear == null ? null
+      : wantsShortYear(el) ? shortYear(v.expYear) : v.expYear),
+    option: (text, v) => v.expYear != null && (text === v.expYear || text === shortYear(v.expYear)),
+  }],
+]);
+
+// Without autocomplete: the security code first ("card code"), then an
+// explicit "MM/YY" (one field), then the split expiry fields. Names are
+// never guessed from "first name"/"last name": those are usually shipping.
+const CARD_WORDS = [
+  [/cvv|cvc|csc|cvn|security.?code|card.?code|card.?verification/i, "cc-csc"],
+  [/mm\s*\/\s*yy/i, "cc-exp"],
+  [/month|\bmm\b/i, "cc-exp-month"],
+  [/year|\byy(yy)?\b/i, "cc-exp-year"],
+  [/exp|valid.?(thru|through|until)/i, "cc-exp"],
+  [/card.?(num|no\b)|cc.?num|\bpan\b/i, "cc-number"],
+  [/card.?holder|name.?on.?card|cc.?name|holder/i, "cc-name"],
+  [/card.?(type|brand)|cc.?type/i, "cc-type"],
+];
+
+// Fill a Card item into doc (scoped by the focused field); return the fields
+// filled. Never submits: an unwanted submit can be a purchase (ADR-0005).
+function fillCard(doc, focused, card) {
+  return fillKinds(scopeFor(doc, focused, fillableControls), CARD_KINDS, CARD_WORDS, card);
 }
 
 // Submit controls for pages without a <form>, best first. Each selector is
@@ -300,9 +486,11 @@ function focusedDocument(doc) {
 // The documents to try, best first, each with its focused input: the
 // focused document if it has a fillable focused input, then the rest in
 // tree order. Only documents whose own origin is the expected one.
-function fillTargets(top, origin) {
+// `focusOf(doc)` is the mode's idea of a focused field (focusedControl for
+// Card items, which also counts a <select>).
+function fillTargets(top, origin, focusOf = focusedInput) {
   const focusedDoc = focusedDocument(top);
-  const focused = focusedInput(focusedDoc);
+  const focused = focusOf(focusedDoc);
   const docs = reachableDocuments(top);
   const ordered = focused ? [focusedDoc, ...docs.filter((d) => d !== focusedDoc)] : docs;
   return ordered
@@ -341,6 +529,13 @@ function fillDocument(root, a, focused) {
 
 // Fills the first target document in which the mode finds fields.
 function qutewardenFill(a) {
+  if (a.mode === "card") {
+    // Never submits, whatever `a.submit` says (ADR-0005).
+    for (const { doc, focused } of fillTargets(document, a.origin, focusedControl)) {
+      if (fillCard(doc, focused, a.card).length) return;
+    }
+    return;
+  }
   const targets = fillTargets(document, a.origin);
   if (!targets.length) return;
   if (a.mode === "probe") {
