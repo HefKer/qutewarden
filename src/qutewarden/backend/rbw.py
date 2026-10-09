@@ -6,9 +6,9 @@ come back only through stdout (``rbw get --raw``). Error text never includes
 stdin data or the output of secret-returning commands.
 
 Re-prompt items make rbw ask for the master password on every decryption, so:
-``list_logins`` never decrypts an Item (``rbw list --raw`` plus the match types
-read from rbw's local db file), ``list_cards`` decrypts only Card items that
-aren't Re-prompt items (for their brand and last 4 digits), and ``get_secrets``
+``list_logins`` and ``list_identities`` never decrypt an Item (``rbw list --raw``
+plus what rbw's local db file says), ``list_cards`` decrypts only Card items
+that aren't Re-prompt items (for their brand and last 4 digits), and ``get_secrets``
 makes exactly one ``rbw get --raw`` call and computes the TOTP code locally.
 
 ``rbw get --raw`` doesn't say which item type it printed, so the type always
@@ -25,7 +25,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, fields
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
 from qutewarden import proc
 from qutewarden.backend.base import (
@@ -40,6 +40,8 @@ from qutewarden.backend.base import (
 from qutewarden.model import (
     CardItem,
     CardSecrets,
+    IdentityItem,
+    IdentitySecrets,
     ItemSecrets,
     ItemUri,
     LoginItem,
@@ -48,6 +50,8 @@ from qutewarden.model import (
     Status,
 )
 from qutewarden.totp import totp_code
+
+_S = TypeVar("_S", bound=ItemSecrets)
 
 MIN_VERSION = (1, 15)
 _NOT_LOGGED_IN_STDERR = "failed to find email address in config"
@@ -159,6 +163,13 @@ class RbwBackend(Backend):
             cards.append(card)
         return cards
 
+    def list_identities(self) -> list[IdentityItem]:
+        listed = _parse_json(self._run_checked(["list", "--raw"]).stdout, "rbw list")
+        db = self._read_db()
+        return [IdentityItem(id=entry["id"], name=entry.get("name") or "", reprompt=info.reprompt)
+                for entry in listed
+                if (info := db.get(entry.get("id"))) is not None and info.type == "Identity"]
+
     def get_secrets(self, item_id: str) -> ItemSecrets:
         info = self._read_db().get(item_id)
         if info is None:
@@ -166,8 +177,9 @@ class RbwBackend(Backend):
         if info.type == "Login":
             return self._login_secrets(self._get_data(item_id))
         if info.type == "Card":
-            data = self._get_data(item_id)
-            return CardSecrets(**{f.name: _text(data.get(f.name)) for f in fields(CardSecrets)})
+            return _values(CardSecrets, self._get_data(item_id))
+        if info.type == "Identity":
+            return _values(IdentitySecrets, self._get_data(item_id))
         raise BackendError("this item type can't be filled")
 
     def _login_secrets(self, data: dict[str, Any]) -> LoginSecrets:
@@ -329,6 +341,11 @@ def _match_mode(match_type: object) -> MatchMode | None:
     if not isinstance(match_type, int):
         return MatchMode.NEVER  # unknown: never match
     return _MATCH_TYPES.get(match_type, MatchMode.NEVER)
+
+
+def _values(cls: type[_S], data: dict[str, Any]) -> _S:
+    """``cls`` with each of its fields taken from rbw's key of the same name."""
+    return cls(**{f.name: _text(data.get(f.name)) for f in fields(cls)})
 
 
 def _text(value: object) -> str | None:

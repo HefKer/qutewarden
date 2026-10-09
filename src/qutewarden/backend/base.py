@@ -12,7 +12,7 @@ from abc import ABC, abstractmethod
 from typing import ClassVar
 
 from qutewarden.errors import QutewardenError
-from qutewarden.model import CardItem, ItemSecrets, LoginItem, Status
+from qutewarden.model import CardItem, IdentityItem, ItemSecrets, LoginItem, Status
 
 
 class BackendError(QutewardenError):
@@ -75,11 +75,16 @@ class Backend(ABC):
         """Every Card item, without secrets; brand and last 4 digits unless it's Re-prompt."""
 
     @abstractmethod
+    def list_identities(self) -> list[IdentityItem]:
+        """Every Identity item, without secrets (no Item is decrypted to list them)."""
+
+    @abstractmethod
     def get_secrets(self, item_id: str) -> ItemSecrets:
         """The Item's values, typed by its item type.
 
         A Login item gives ``LoginSecrets`` (password and current TOTP code, None
-        if it has no TOTP), a Card item ``CardSecrets``.
+        if it has no TOTP), a Card item ``CardSecrets``, an Identity item
+        ``IdentitySecrets``.
         """
 
     @abstractmethod

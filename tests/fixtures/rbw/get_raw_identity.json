@@ -1,0 +1,27 @@
+{
+  "id": "1a3c5e7a-9b1d-4f3a-8c5e-7a9b1d3f5a7c",
+  "folder": null,
+  "name": "Me",
+  "data": {
+    "title": "Dr",
+    "first_name": "Alice",
+    "middle_name": "M",
+    "last_name": "Example",
+    "address1": "QWSECRET-rbw-1 Main St",
+    "address2": "Apt 2",
+    "address3": null,
+    "city": "Springfield",
+    "state": "IL",
+    "postal_code": "62701",
+    "country": "US",
+    "phone": "QWSECRET-rbw-555-0100",
+    "email": "alice@example.com",
+    "ssn": "QWSECRET-rbw-ssn",
+    "license_number": null,
+    "passport_number": null,
+    "username": "alice"
+  },
+  "fields": [],
+  "notes": null,
+  "history": []
+}

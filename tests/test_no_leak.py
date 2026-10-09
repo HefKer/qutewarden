@@ -4,8 +4,9 @@ Runs every registered subcommand, under several config variants, against the
 fake Backend and fails if a placeholder secret (``SECRET_MARKER``) shows up
 anywhere it must not: lines sent to QUTE_FIFO (messages included), picker
 prompts and lines, a child process's argv or environment, or our own
-stdout/stderr. The fake Card items' numbers and security codes carry the
-marker too; only their last 4 digits may reach a picker line.
+stdout/stderr. The fake Card items' numbers and security codes, and every value
+of the fake Identity items, carry the marker too; only a card's last 4 digits
+may reach a picker line.
 
 Subcommands are taken from ``all_commands()`` at collection time, so a new
 ``commands/*.py`` is covered without touching this file.
@@ -34,7 +35,7 @@ from qutewarden.context import Context
 # Subcommands whose job is to get a secret into the page (or, if configured,
 # the clipboard). For these the test also checks that the marker *did* reach
 # one of those sinks, which proves the test is wired up.
-FILL_TYPE = {"fill", "totp", "generate", "vault", "card"}
+FILL_TYPE = {"fill", "totp", "generate", "vault", "card", "identity"}
 
 # config variant -> (flags, FakePicker keyword arguments)
 VARIANTS: dict[str, tuple[list[str], dict]] = {
@@ -119,7 +120,7 @@ def test_no_secret_leaks(name, variant, observe):
 def test_every_registered_subcommand_is_covered():
     # The parametrization above is all_commands(); this pins the v1 set so a
     # broken registry (empty or partial) can't make the no-leak test vacuous.
-    assert {"fill", "totp", "generate", "vault", "card", "unlock", "lock", "sync",
+    assert {"fill", "totp", "generate", "vault", "card", "identity", "unlock", "lock", "sync",
             "status"} <= set(
         all_commands())
 

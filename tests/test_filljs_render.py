@@ -2,8 +2,13 @@
 
 import pytest
 
-from qutewarden.filljs import render_card_fill_js, render_fill_js, render_probe_js
-from qutewarden.model import CardSecrets
+from qutewarden.filljs import (
+    render_card_fill_js,
+    render_fill_js,
+    render_identity_fill_js,
+    render_probe_js,
+)
+from qutewarden.model import CardSecrets, IdentitySecrets
 
 ORIGIN = "https://login.example.test"
 
@@ -55,3 +60,23 @@ def test_card_script_never_asks_to_submit():
     js = render_card_fill_js(expected_origin=ORIGIN, card=CardSecrets(number="4242"))
     assert '"mode": "card"' in js
     assert '"submit": false' in js
+
+
+def test_identity_script_never_asks_to_submit():
+    js = render_identity_fill_js(expected_origin=ORIGIN,
+                                 identity=IdentitySecrets(first_name="Alice"))
+    assert '"mode": "identity"' in js
+    assert '"submit": false' in js
+
+
+def test_identity_street_address_joins_the_address_lines_it_has():
+    js = render_identity_fill_js(expected_origin=ORIGIN, identity=IdentitySecrets(
+        address1="1 Main St", address3="Floor 3"))
+    assert '"streetAddress": "1 Main St, Floor 3"' in js
+    assert '"addressLine2": null' in js
+
+
+def test_identity_numbers_no_field_takes_are_left_out_of_the_script():
+    js = render_identity_fill_js(expected_origin=ORIGIN, identity=IdentitySecrets(
+        ssn="SSN-1", license_number="LIC-1", passport_number="PASS-1"))
+    assert not any(value in js for value in ("SSN-1", "LIC-1", "PASS-1"))

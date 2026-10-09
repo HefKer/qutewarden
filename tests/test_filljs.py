@@ -10,8 +10,13 @@ from pathlib import Path
 
 import pytest
 
-from qutewarden.filljs import render_card_fill_js, render_fill_js, render_probe_js
-from qutewarden.model import CardSecrets
+from qutewarden.filljs import (
+    render_card_fill_js,
+    render_fill_js,
+    render_identity_fill_js,
+    render_probe_js,
+)
+from qutewarden.model import CardSecrets, IdentitySecrets
 
 pytestmark = pytest.mark.browser
 sync_api = pytest.importorskip("playwright.sync_api")
@@ -717,3 +722,89 @@ def test_a_card_form_in_an_iframe_is_filled_only_from_the_same_origin(
     expected = {"cc-number": "4242424242424242", "cc-exp-month": "3", "cc-type": "VI"}
     assert frame_values(frame, *expected) == (
         expected if filled else dict.fromkeys(expected, ""))
+
+
+# --- Identity items (#36) -----------------------------------------------------
+
+IDENTITY = IdentitySecrets(
+    title="Dr", first_name="Alice", middle_name="M", last_name="Example", company="Example Inc",
+    address1="1 Main St", address2="Apt 2", city="Springfield", state="IL", postal_code="62701",
+    country="US", phone="555-0100", email="alice@example.com", ssn="000-00-0000",
+    username="alice")
+ADDRESS_IDS = ("title", "given-name", "additional-name", "family-name", "organization",
+               "address-line1", "address-line2", "address-level2", "address-level1",
+               "postal-code", "country", "email", "tel", "username")
+
+
+def fill_identity(page, identity: IdentitySecrets = IDENTITY, *, origin: str = ORIGIN) -> None:
+    run_isolated(page, render_identity_fill_js(expected_origin=origin, identity=identity))
+
+
+def test_identity_fields_are_found_by_autocomplete(page):
+    load(page, "address.html")
+    fill_identity(page)
+    assert values(page, *ADDRESS_IDS) == {
+        "title": "Dr", "given-name": "Alice", "additional-name": "M", "family-name": "Example",
+        "organization": "Example Inc", "address-line1": "1 Main St", "address-line2": "Apt 2",
+        "address-level2": "Springfield", "address-level1": "IL", "postal-code": "62701",
+        "country": "US", "email": "alice@example.com", "tel": "555-0100", "username": "alice"}
+    assert ["country", "change"] in page.evaluate("window.events")
+
+
+def test_an_identity_fill_leaves_other_fields_alone_and_never_submits(page):
+    load(page, "address.html")
+    fill_identity(page)
+    assert values(page, "cc-number", "gift") == {"cc-number": "", "gift": ""}
+    page.wait_for_timeout(100)
+    assert page.evaluate("window.submitted") == 0
+
+
+def test_a_street_address_field_gets_every_address_line(page):
+    load(page, "address.html")
+    page.evaluate("""() => {
+        document.getElementById("address-line1").setAttribute("autocomplete", "street-address");
+        document.getElementById("address-line2").remove();
+    }""")
+    fill_identity(page)
+    assert values(page, "address-line1") == {"address-line1": "1 Main St, Apt 2"}
+
+
+def test_identity_fields_without_autocomplete_are_found_by_name_id_label_and_placeholder(page):
+    load(page, "address_plain.html")
+    fill_identity(page, dataclasses.replace(IDENTITY, country="United States"))
+    assert values(page, "fname", "lname", "org", "street", "apt", "town", "region", "zip",
+                  "land", "mail", "phone") == {
+        "fname": "Alice", "lname": "Example", "org": "Example Inc", "street": "1 Main St",
+        "apt": "Apt 2", "town": "Springfield", "region": "IL", "zip": "62701", "land": "us",
+        "mail": "alice@example.com", "phone": "555-0100"}
+    assert values(page, "gift") == {"gift": ""}
+
+
+def test_a_country_select_without_a_matching_option_is_left_alone(page):
+    load(page, "address.html")
+    fill_identity(page, dataclasses.replace(IDENTITY, country="Narnia"))
+    assert values(page, "country", "postal-code") == {"country": "", "postal-code": "62701"}
+
+
+def test_fields_the_identity_has_no_value_for_are_left_alone(page):
+    load(page, "address.html")
+    page.fill("#organization", "Typed Ltd")
+    fill_identity(page, IdentitySecrets(first_name="Alice"))
+    assert values(page, "given-name", "family-name", "organization", "country") == {
+        "given-name": "Alice", "family-name": "", "organization": "Typed Ltd", "country": ""}
+
+
+def test_the_focused_fields_form_is_the_identity_fill_scope(page):
+    load(page, "address.html")
+    page.evaluate("""() => document.body.insertAdjacentHTML("afterbegin",
+        '<form id="other"><input id="other-email" autocomplete="email"></form>')""")
+    page.focus("#postal-code")
+    fill_identity(page)
+    assert values(page, "other-email", "email") == {
+        "other-email": "", "email": "alice@example.com"}
+
+
+def test_an_identity_fill_on_another_origin_fills_nothing(page):
+    load(page, "address.html", origin="https://evil.example.test")
+    fill_identity(page)
+    assert values(page, "given-name", "email") == {"given-name": "", "email": ""}

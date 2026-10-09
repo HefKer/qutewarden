@@ -16,7 +16,7 @@ import re
 from importlib import resources
 from typing import Literal, get_args
 
-from qutewarden.model import CardSecrets
+from qutewarden.model import CardSecrets, IdentitySecrets
 
 FillMode = Literal["auto", "login", "otp", "new_password"]
 
@@ -84,6 +84,39 @@ def render_card_fill_js(*, expected_origin: str, card: CardSecrets) -> str:
             "expMonth": _month(card.exp_month),
             "expYear": _year(card.exp_year),
             "code": card.code or None,
+        },
+        "submit": False,
+    })
+
+
+def render_identity_fill_js(*, expected_origin: str, identity: IdentitySecrets) -> str:
+    """Return the script that fills an Identity item into the page's address form.
+
+    It never submits the form (ADR-0005). Only the values some field kind
+    takes are passed (not the SSN, licence or passport number); values the
+    Item doesn't have are null, and the script leaves their fields alone.
+    """
+    lines = [line for line in (identity.address1, identity.address2, identity.address3) if line]
+    return _render({
+        "origin": expected_origin,
+        "mode": "identity",
+        "identity": {
+            "honorificPrefix": identity.title or None,
+            "givenName": identity.first_name or None,
+            "additionalName": identity.middle_name or None,
+            "familyName": identity.last_name or None,
+            "organization": identity.company or None,
+            "streetAddress": ", ".join(lines) or None,
+            "addressLine1": identity.address1 or None,
+            "addressLine2": identity.address2 or None,
+            "addressLine3": identity.address3 or None,
+            "addressLevel1": identity.state or None,
+            "addressLevel2": identity.city or None,
+            "postalCode": identity.postal_code or None,
+            "country": identity.country or None,
+            "email": identity.email or None,
+            "tel": identity.phone or None,
+            "username": identity.username or None,
         },
         "submit": False,
     })

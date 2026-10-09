@@ -25,13 +25,24 @@ from qutewarden.backend.base import (
 )
 from qutewarden.backend.fake import SECRET_MARKER
 from qutewarden.backend.rbw import RbwBackend
-from qutewarden.model import CardItem, CardSecrets, ItemUri, LoginItem, LoginSecrets, MatchMode
+from qutewarden.model import (
+    CardItem,
+    CardSecrets,
+    IdentityItem,
+    IdentitySecrets,
+    ItemUri,
+    LoginItem,
+    LoginSecrets,
+    MatchMode,
+)
 
 FIXTURES = Path(__file__).parent / "fixtures" / "rbw"
 GITHUB_ID = "6f1c2d4e-8a3b-4c5d-9e7f-0a1b2c3d4e5f"
 BANK_ID = "a2c4e6f8-1b3d-4f5a-9c7e-0d2f4a6b8c1e"
 CARD_ID = "e5f7a9b1-3c5d-4e7f-8a9b-1c3d5e7f9a0b"
 OLD_CARD_ID = "f7b9c1d3-5e7f-4a9b-8c1d-3e5f7a9b1c2d"  # a Re-prompt Card item
+IDENTITY_ID = "1a3c5e7a-9b1d-4f3a-8c5e-7a9b1d3f5a7c"
+PASSPORT_ID = "2b4d6f8b-0c2e-4a4b-9d6f-8b0c2e4a6b8d"  # a Re-prompt Identity item
 NOTE_ID = "0b9e7a1c-2d3f-4e5a-8b6c-7d8e9f0a1b2c"
 EMAIL = "alice@example.com"
 CONFIG_SHOW = json.dumps({"email": EMAIL, "sso_id": None, "base_url": None, "identity_url": None,
@@ -324,6 +335,18 @@ def test_list_cards_without_db_asks_for_sync(rbw):
     assert excinfo.value.hint == "run `rbw sync`"
 
 
+# --- list_identities --------------------------------------------------------
+
+def test_list_identities_takes_identity_items_from_the_db_without_decrypting_any(rbw):
+    rbw.respond(["list", "--raw"], fixture("list_raw.json"))
+    rbw.write_db()
+    assert rbw.backend().list_identities() == [
+        IdentityItem(id=IDENTITY_ID, name="Me"),
+        IdentityItem(id=PASSPORT_ID, name="Passport", reprompt=True),
+    ]
+    assert not any(argv[0] == "get" for argv in rbw.argvs)
+
+
 # --- get_secrets ------------------------------------------------------------
 
 def test_get_secrets_parses_rbw_get_raw_with_one_call(rbw):
@@ -342,6 +365,16 @@ def test_get_secrets_of_a_card_item_returns_its_card_values(rbw):
     assert rbw.backend().get_secrets(CARD_ID) == CardSecrets(
         cardholder_name="Alice Example", number="QWSECRET-rbw-4111 1111 1111 1234",
         brand="Visa", exp_month="3", exp_year="2030", code="QWSECRET-rbw-code")
+
+
+def test_get_secrets_of_an_identity_item_returns_its_identity_values(rbw):
+    rbw.respond(["get", "--raw", "--", IDENTITY_ID], fixture("get_raw_identity.json"))
+    rbw.write_db()
+    assert rbw.backend().get_secrets(IDENTITY_ID) == IdentitySecrets(
+        title="Dr", first_name="Alice", middle_name="M", last_name="Example",
+        address1="QWSECRET-rbw-1 Main St", address2="Apt 2", city="Springfield", state="IL",
+        postal_code="62701", country="US", phone="QWSECRET-rbw-555-0100",
+        email="alice@example.com", ssn="QWSECRET-rbw-ssn", username="alice")
 
 
 def test_get_secrets_takes_the_item_type_from_the_db_not_from_the_keys(rbw):

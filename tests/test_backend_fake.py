@@ -11,13 +11,22 @@ from qutewarden.backend.base import (
 )
 from qutewarden.backend.fake import (
     FAKE_CARDS,
+    FAKE_IDENTITIES,
     FAKE_ITEMS,
     SECRET_MARKER,
     FakeBackend,
     fake_password,
     fake_totp,
 )
-from qutewarden.model import CardSecrets, LoginItem, LoginSecrets, MatchMode, Status
+from qutewarden.model import (
+    CardSecrets,
+    IdentityItem,
+    IdentitySecrets,
+    LoginItem,
+    LoginSecrets,
+    MatchMode,
+    Status,
+)
 
 
 def test_fake_is_a_backend_named_fake():
@@ -82,6 +91,21 @@ def test_get_secrets_of_a_card_item_returns_card_values_with_the_marker():
     assert secrets.number == f"{SECRET_MARKER}-4242424242424242"
     assert secrets.code is not None and SECRET_MARKER in secrets.code
     assert (secrets.exp_month, secrets.exp_year) == ("3", "2030")
+    assert SECRET_MARKER not in repr(secrets)
+
+
+def test_list_identities_shows_names_only():
+    identities = FakeBackend().list_identities()
+    assert identities == list(FAKE_IDENTITIES)
+    assert all(isinstance(identity, IdentityItem) for identity in identities)
+    assert {identity.id for identity in identities if identity.reprompt} == {"locked-identity"}
+
+
+def test_get_secrets_of_an_identity_item_returns_values_that_all_carry_the_marker():
+    secrets = FakeBackend().get_secrets("me")
+    assert isinstance(secrets, IdentitySecrets)
+    assert secrets.first_name == f"{SECRET_MARKER}-Alice"
+    assert secrets.country == f"{SECRET_MARKER}-US"
     assert SECRET_MARKER not in repr(secrets)
 
 
