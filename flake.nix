@@ -1,10 +1,21 @@
 {
   description = "qutewarden: Bitwarden (rbw) userscript for qutebrowser";
 
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    # Only for the flake check that evaluates the home-manager module.
+    home-manager = {
+      url = "github:nix-community/home-manager";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+  };
 
   outputs =
-    { self, nixpkgs }:
+    {
+      self,
+      nixpkgs,
+      home-manager,
+    }:
     let
       systems = [
         "x86_64-linux"
@@ -61,6 +72,16 @@
           };
         };
         default = self.packages.${pkgs.stdenv.hostPlatform.system}.qutewarden;
+      });
+
+      homeManagerModules.default = import ./nix/hm-module.nix self;
+
+      checks = forAllSystems (pkgs: {
+        hm-module = import ./nix/hm-module-check.nix {
+          inherit pkgs home-manager;
+          module = self.homeManagerModules.default;
+          package = self.packages.${pkgs.stdenv.hostPlatform.system}.default;
+        };
       });
 
       devShells = forAllSystems (pkgs: {

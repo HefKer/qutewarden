@@ -62,6 +62,32 @@ ln -sf "$(command -v qutewarden)" ~/.local/share/qutebrowser/userscripts/qutewar
 
 With `nix profile`, the link to `~/.nix-profile/bin/qutewarden` stays valid across upgrades. Alternatively, bind the absolute path, e.g. `spawn --userscript /run/current-system/sw/bin/qutewarden fill`.
 
+### home-manager
+
+The flake exports a home-manager module that installs qutewarden, links it into qutebrowser's userscripts directory, writes the config file and adds key bindings:
+
+```nix
+{
+  imports = [ qutewarden.homeManagerModules.default ];
+
+  programs.qutewarden = {
+    enable = true;
+    # Written to $XDG_CONFIG_HOME/qutewarden/config.toml (see Configuration).
+    settings = {
+      auto_fill = true;
+      matching.equivalent_domains = [ [ "example.com" "example.org" ] ];
+    };
+    # Added to programs.qutebrowser.keyBindings.normal as `spawn --userscript qutewarden …`.
+    keyBindings = {
+      ",p" = "fill";
+      ",P" = "fill --auto-fill";
+    };
+  };
+}
+```
+
+`package` defaults to this flake's package. The key bindings only take effect when qutebrowser's config is managed by `programs.qutebrowser`.
+
 ## Key bindings
 
 In qutebrowser's `config.py` (or with `:bind`, e.g. `:bind ,p spawn --userscript qutewarden fill`):
@@ -177,7 +203,7 @@ nix build                                       # the package; ./result/bin/qute
 git config core.hooksPath .githooks             # once per clone: run scripts/check before each commit
 ```
 
-CI runs `scripts/check`, `nix build` and, as a separate job, the e2e suite on every PR. The e2e suite ([ADR-0007](docs/adr/0007-e2e-tests-run-real-rbw-and-qutebrowser-against-a-local-vaultwarden.md), `tests/e2e/`) runs offscreen qutebrowser and rbw against a throwaway Vaultwarden on 127.0.0.1, with its own rbw profile and XDG dirs under `/tmp`; it never touches your own vault. Before a release, go through the manual [smoke test](docs/e2e-checklist.md) in a real qutebrowser.
+CI runs `scripts/check`, `nix build`, `nix flake check` and, as a separate job, the e2e suite on every PR. The e2e suite ([ADR-0007](docs/adr/0007-e2e-tests-run-real-rbw-and-qutebrowser-against-a-local-vaultwarden.md), `tests/e2e/`) runs offscreen qutebrowser and rbw against a throwaway Vaultwarden on 127.0.0.1, with its own rbw profile and XDG dirs under `/tmp`; it never touches your own vault. Before a release, go through the manual [smoke test](docs/e2e-checklist.md) in a real qutebrowser.
 
 The design is in [`docs/spec-v1.md`](docs/spec-v1.md) and [`docs/spec-v2.md`](docs/spec-v2.md), the vocabulary in [`GLOSSARY.md`](GLOSSARY.md).
 

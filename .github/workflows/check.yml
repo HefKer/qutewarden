@@ -13,6 +13,7 @@ jobs:
       - uses: cachix/install-nix-action@v31
       - run: nix develop -c scripts/check
       - run: nix build
+      - run: nix flake check
 
   e2e:
     runs-on: ubuntu-latest
