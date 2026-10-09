@@ -106,6 +106,7 @@ class SeededVault:
     replace: Login  # replace.test: `generate` replaces its password
     two_1: Login  # twocands.test, with two_2: `generate` offers both and a new Item
     two_2: Login
+    equivalent: Login  # equiv-a.test, a Candidate on equiv-b.test through the user's group
     others: list[str] = field(default_factory=list)  # names of the Card and Identity items
 
     def logins(self) -> list[Login]:
@@ -138,6 +139,7 @@ def build(markers: Markers) -> SeededVault:
                       notes=s("notes-replace")),
         two_1=Login("Two Y1", "yuri", s("pw-two-1"), (Uri("https://twocands.test"),)),
         two_2=Login("Two Y2", "yara", s("pw-two-2"), (Uri("https://twocands.test"),)),
+        equivalent=Login("Equiv E", "ella", s("pw-equivalent"), (Uri("https://equiv-a.test"),)),
     )
 
 

@@ -6,6 +6,7 @@ Tick each box; note the qutebrowser, QtWebEngine and rbw versions at the top of 
 
 ## Setup
 
+- [ ] Regenerate Bitwarden's global Equivalent domains with `nix develop -c scripts/update-equivalent-domains` and commit any change (ADR-0006).
 - [ ] Build and install: `nix build` (or `nix profile install .`), then `./result/bin/qutewarden --version` prints the version being released.
 - [ ] Link it where qutebrowser looks (`spawn --userscript` doesn't search `PATH`): `ln -sf "$PWD/result/bin/qutewarden" ~/.local/share/qutebrowser/userscripts/qutewarden`.
 - [ ] Add the key bindings from the README (`,p` fill, `,t` totp, `,g` generate, `,v` vault, `,u` unlock, `,l` lock) and `:config-source`.
