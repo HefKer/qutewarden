@@ -15,6 +15,7 @@ from qutewarden.backend.fake import (
     FAKE_ITEMS,
     SECRET_MARKER,
     FakeBackend,
+    fake_fields,
     fake_password,
     fake_totp,
 )
@@ -68,12 +69,14 @@ def test_list_logins_returns_items_without_secrets():
 
 def test_get_secrets_returns_password_and_totp_code():
     secrets = FakeBackend().get_secrets("github")
-    assert secrets == LoginSecrets(password=fake_password("github"), totp=fake_totp("github"))
+    assert secrets == LoginSecrets(password=fake_password("github"), totp=fake_totp("github"),
+                                   fields=fake_fields("github"))
 
 
 def test_get_secrets_without_totp_and_unknown_item():
     backend = FakeBackend()
-    assert backend.get_secrets("no-totp") == LoginSecrets(password=fake_password("no-totp"))
+    assert backend.get_secrets("no-totp") == LoginSecrets(password=fake_password("no-totp"),
+                                                          fields=fake_fields("no-totp"))
     with pytest.raises(ItemNotFound):
         backend.get_secrets("missing")
 

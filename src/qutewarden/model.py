@@ -59,12 +59,42 @@ class IdentityItem:
     reprompt: bool = False
 
 
+class FieldKind(StrEnum):
+    """A Custom field's kind, as Bitwarden names it."""
+
+    TEXT = "text"
+    HIDDEN = "hidden"
+    BOOLEAN = "boolean"
+    LINKED = "linked"
+
+
+@dataclass(frozen=True)
+class CustomField:
+    """One Custom field of an Item. Its value counts as a secret (Security rule 6).
+
+    A boolean's value is ``"true"`` or ``"false"``. A linked field's value is the
+    built-in value it stands for, resolved by the Backend; None if the Item has none.
+    """
+
+    name: str
+    kind: FieldKind
+    value: str | None = None
+
+    def __repr__(self) -> str:
+        return f"CustomField({self.name!r}, {self.kind.value}, <redacted>)"
+
+    __str__ = __repr__
+
+
 @dataclass(frozen=True)
 class ItemSecrets:
     """The values of one Item, as ``Backend.get_secrets`` returns them.
 
     One subclass per item type; they never show their values in ``repr``.
+    ``fields`` are the Item's Custom fields, in the Vault's order.
     """
+
+    fields: tuple[CustomField, ...] = ()
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}(<redacted>)"

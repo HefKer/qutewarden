@@ -18,7 +18,8 @@
   },
   "fields": [
     {"name": "recovery", "value": "QWSECRET-rbw-hidden-field", "type": "hidden"},
-    {"name": "team", "value": "core", "type": "text"}
+    {"name": "team", "value": "core", "type": "text"},
+    {"name": "Login name", "value": null, "type": "linked"}
   ],
   "notes": "QWSECRET-rbw-note line 1\nline 2",
   "history": [

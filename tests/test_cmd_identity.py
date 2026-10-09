@@ -42,6 +42,12 @@ def test_every_identity_item_is_offered_by_name(identity, fake_picker):
     assert fake_picker.lines == [["Me", "Work identity", "Locked identity"]]
 
 
+def test_the_picked_identitys_custom_fields_go_into_the_script(identity, fake_qutebrowser):
+    assert identity(picker=FakePicker(choices=[0])) == 0
+    [js] = fake_qutebrowser.js
+    assert '{"name": "team", "kind": "text", "value": "QWSECRET-text-me"}' in js
+
+
 def test_the_picked_identity_is_filled_with_its_values(identity, fake_qutebrowser):
     assert identity(picker=FakePicker(choices=[0])) == 0
     [js] = fake_qutebrowser.js

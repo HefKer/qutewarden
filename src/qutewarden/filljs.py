@@ -13,10 +13,11 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Sequence
 from importlib import resources
 from typing import Literal, get_args
 
-from qutewarden.model import CardSecrets, IdentitySecrets
+from qutewarden.model import CardSecrets, CustomField, IdentitySecrets
 
 FillMode = Literal["auto", "login", "otp", "new_password"]
 
@@ -42,11 +43,14 @@ def render_fill_js(
     totp: str | None = None,
     submit: bool = False,
     probe_nonce: str | None = None,
+    fields: Sequence[CustomField] = (),
 ) -> str:
     """Return the fill script for a page whose origin must be ``expected_origin``.
 
     ``expected_origin`` is ``scheme://host[:port]`` exactly as the page's
     ``location.origin``; on any other origin the script does nothing.
+    ``fields`` are the Item's Custom fields; they fill the document the built-in
+    fill chose, never a field it filled, and before any submit.
     """
     if mode not in _FILL_MODES:
         raise ValueError(f"unknown fill mode: {mode!r}")
@@ -60,6 +64,7 @@ def render_fill_js(
         "totp": totp,
         "submit": submit,
         "probeNonce": probe_nonce,
+        "fields": _fields(fields),
     })
 
 
@@ -85,6 +90,7 @@ def render_card_fill_js(*, expected_origin: str, card: CardSecrets) -> str:
             "expYear": _year(card.exp_year),
             "code": card.code or None,
         },
+        "fields": _fields(card.fields),
         "submit": False,
     })
 
@@ -118,8 +124,15 @@ def render_identity_fill_js(*, expected_origin: str, identity: IdentitySecrets) 
             "tel": identity.phone or None,
             "username": identity.username or None,
         },
+        "fields": _fields(identity.fields),
         "submit": False,
     })
+
+
+def _fields(fields: Sequence[CustomField]) -> list[dict[str, str]]:
+    """The Custom fields that have a value, for the script (``kind`` as Bitwarden names it)."""
+    return [{"name": f.name, "kind": f.kind.value, "value": f.value}
+            for f in fields if f.value is not None]
 
 
 def _split_name(name: str | None) -> tuple[str | None, str | None]:

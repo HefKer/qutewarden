@@ -7,6 +7,7 @@ stdin and environment.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import os
 import sys
@@ -28,6 +29,8 @@ from qutewarden.backend.rbw import RbwBackend
 from qutewarden.model import (
     CardItem,
     CardSecrets,
+    CustomField,
+    FieldKind,
     IdentityItem,
     IdentitySecrets,
     ItemUri,
@@ -362,7 +365,8 @@ def test_get_secrets_parses_rbw_get_raw_with_one_call(rbw):
 def test_get_secrets_of_a_card_item_returns_its_card_values(rbw):
     rbw.respond(["get", "--raw", "--", CARD_ID], fixture("get_raw_card.json"))
     rbw.write_db()
-    assert rbw.backend().get_secrets(CARD_ID) == CardSecrets(
+    secrets = rbw.backend().get_secrets(CARD_ID)
+    assert dataclasses.replace(secrets, fields=()) == CardSecrets(
         cardholder_name="Alice Example", number="QWSECRET-rbw-4111 1111 1111 1234",
         brand="Visa", exp_month="3", exp_year="2030", code="QWSECRET-rbw-code")
 
@@ -370,7 +374,8 @@ def test_get_secrets_of_a_card_item_returns_its_card_values(rbw):
 def test_get_secrets_of_an_identity_item_returns_its_identity_values(rbw):
     rbw.respond(["get", "--raw", "--", IDENTITY_ID], fixture("get_raw_identity.json"))
     rbw.write_db()
-    assert rbw.backend().get_secrets(IDENTITY_ID) == IdentitySecrets(
+    secrets = rbw.backend().get_secrets(IDENTITY_ID)
+    assert dataclasses.replace(secrets, fields=()) == IdentitySecrets(
         title="Dr", first_name="Alice", middle_name="M", last_name="Example",
         address1="QWSECRET-rbw-1 Main St", address2="Apt 2", city="Springfield", state="IL",
         postal_code="62701", country="US", phone="QWSECRET-rbw-555-0100",
@@ -383,6 +388,54 @@ def test_get_secrets_takes_the_item_type_from_the_db_not_from_the_keys(rbw):
         {"id": CARD_ID, "name": "Card", "data": {"username": "x", "password": "y"}}))
     rbw.write_db()
     assert rbw.backend().get_secrets(CARD_ID) == CardSecrets()
+
+
+def test_get_secrets_returns_a_login_items_custom_fields_with_linked_ones_resolved(rbw):
+    rbw.respond(["get", "--raw", "--", GITHUB_ID], fixture("get_raw_login.json"))
+    rbw.write_db()
+    assert rbw.backend().get_secrets(GITHUB_ID).fields == (
+        CustomField("recovery", FieldKind.HIDDEN, "QWSECRET-rbw-hidden-field"),
+        CustomField("team", FieldKind.TEXT, "core"),
+        # rbw get --raw leaves out what it stands for; the db file says: the username.
+        CustomField("Login name", FieldKind.LINKED, "alice@example.com"),
+    )
+
+
+def test_get_secrets_resolves_a_card_items_linked_field_to_the_card_value(rbw):
+    rbw.respond(["get", "--raw", "--", CARD_ID], fixture("get_raw_card.json"))
+    rbw.write_db()
+    assert rbw.backend().get_secrets(CARD_ID).fields == (
+        CustomField("PIN", FieldKind.HIDDEN, "QWSECRET-rbw-pin"),
+        CustomField("Card no", FieldKind.LINKED, "QWSECRET-rbw-4111 1111 1111 1234"),
+    )
+
+
+def test_get_secrets_resolves_an_identity_full_name_and_keeps_booleans(rbw):
+    rbw.respond(["get", "--raw", "--", IDENTITY_ID], fixture("get_raw_identity.json"))
+    rbw.write_db()
+    assert rbw.backend().get_secrets(IDENTITY_ID).fields == (
+        CustomField("Full name", FieldKind.LINKED, "Alice M Example"),
+        CustomField("newsletter", FieldKind.BOOLEAN, "true"),
+    )
+
+
+def test_get_secrets_leaves_out_a_linked_field_the_db_does_not_line_up_with(rbw):
+    # The db file is older than the Item: it lists no fields for it.
+    item = json.loads(fixture("get_raw_reprompt.json"))
+    item["fields"] = [{"name": "Login name", "value": None, "type": "linked"},
+                      {"name": "note", "value": "QWSECRET-rbw-x", "type": "text"}]
+    rbw.respond(["get", "--raw", "--", BANK_ID], json.dumps(item))
+    rbw.write_db()
+    assert rbw.backend().get_secrets(BANK_ID).fields == (
+        CustomField("note", FieldKind.TEXT, "QWSECRET-rbw-x"),
+    )
+
+
+def test_custom_fields_never_show_their_values_in_repr(rbw):
+    rbw.respond(["get", "--raw", "--", GITHUB_ID], fixture("get_raw_login.json"))
+    rbw.write_db()
+    secrets = rbw.backend().get_secrets(GITHUB_ID)
+    assert SECRET_MARKER not in repr(secrets.fields) + repr(secrets) + str(secrets.fields[0])
 
 
 def test_get_secrets_of_an_item_missing_from_the_db_asks_for_sync(rbw):
@@ -406,7 +459,8 @@ def test_get_secrets_computes_the_totp_code_from_the_seed(rbw):
     item["data"]["totp"] = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"  # RFC 6238 seed
     rbw.respond(["get", "--raw", "--", GITHUB_ID], json.dumps(item))
     secrets = rbw.backend(clock=lambda: 59.0).get_secrets(GITHUB_ID)
-    assert secrets == LoginSecrets(password="QWSECRET-rbw-password", totp="287082")
+    assert isinstance(secrets, LoginSecrets)
+    assert (secrets.password, secrets.totp) == ("QWSECRET-rbw-password", "287082")
 
 
 def test_get_secrets_without_totp_or_password(rbw):

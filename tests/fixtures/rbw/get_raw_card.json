@@ -10,7 +10,10 @@
     "exp_year": "2030",
     "code": "QWSECRET-rbw-code"
   },
-  "fields": [],
+  "fields": [
+    {"name": "PIN", "value": "QWSECRET-rbw-pin", "type": "hidden"},
+    {"name": "Card no", "value": null, "type": "linked"}
+  ],
   "notes": null,
   "history": []
 }

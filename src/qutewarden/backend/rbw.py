@@ -12,7 +12,8 @@ that aren't Re-prompt items (for their brand and last 4 digits), and ``get_secre
 makes exactly one ``rbw get --raw`` call and computes the TOTP code locally.
 
 ``rbw get --raw`` doesn't say which item type it printed, so the type always
-comes from the db file (ADR-0003, amendment for v2).
+comes from the db file (ADR-0003, amendment for v2). Nor does it say what a
+linked Custom field stands for: that ``linked_id`` comes from the db file too.
 """
 
 from __future__ import annotations
@@ -40,6 +41,8 @@ from qutewarden.backend.base import (
 from qutewarden.model import (
     CardItem,
     CardSecrets,
+    CustomField,
+    FieldKind,
     IdentityItem,
     IdentitySecrets,
     ItemSecrets,
@@ -85,6 +88,7 @@ class _DbEntry:
     reprompt: bool
     has_totp: bool = False
     match_types: tuple[object, ...] = ()  # one per URI, Login items only
+    linked_ids: tuple[object, ...] = ()  # one per Custom field (None unless linked)
 
 
 class RbwBackend(Backend):
@@ -174,15 +178,20 @@ class RbwBackend(Backend):
         info = self._read_db().get(item_id)
         if info is None:
             raise ItemNotFound("rbw has no item with that id", hint=_SYNC_HINT)
+        if info.type not in ("Login", "Card", "Identity"):
+            raise BackendError("this item type can't be filled")
+        item = self._get_raw(item_id)
+        data = item.get("data")
+        data = data if isinstance(data, dict) else {}
+        custom = _custom_fields(item.get("fields"), info.linked_ids, data)
         if info.type == "Login":
-            return self._login_secrets(self._get_data(item_id))
+            return self._login_secrets(data, custom)
         if info.type == "Card":
-            return _values(CardSecrets, self._get_data(item_id))
-        if info.type == "Identity":
-            return _values(IdentitySecrets, self._get_data(item_id))
-        raise BackendError("this item type can't be filled")
+            return _values(CardSecrets, data, custom)
+        return _values(IdentitySecrets, data, custom)
 
-    def _login_secrets(self, data: dict[str, Any]) -> LoginSecrets:
+    def _login_secrets(self, data: dict[str, Any],
+                       custom: tuple[CustomField, ...]) -> LoginSecrets:
         seed = data.get("totp")
         code = None
         if seed:
@@ -190,7 +199,7 @@ class RbwBackend(Backend):
                 code = totp_code(seed, now=self._clock())
             except ValueError:
                 raise BackendError("this item's TOTP secret isn't valid") from None
-        return LoginSecrets(password=data.get("password"), totp=code)
+        return LoginSecrets(password=data.get("password"), totp=code, fields=custom)
 
     # --- writing ----------------------------------------------------------------
 
@@ -291,7 +300,8 @@ class RbwBackend(Backend):
         return Path(base) / (f"rbw-{profile}" if profile else "rbw")
 
     def _read_db(self) -> dict[str, _DbEntry]:
-        """Read only the non-secret, unencrypted bits we need: id -> type, reprompt, URI modes.
+        """Read only the non-secret, unencrypted bits we need: id -> type, reprompt, URI
+        modes, linked field ids.
 
         The file is opened read-only and never written. Everything else in it
         (tokens, encrypted fields) is dropped right away.
@@ -313,14 +323,17 @@ class RbwBackend(Backend):
             else:
                 continue
             reprompt = entry.get("master_password_reprompt") not in (None, 0)
+            linked_ids = tuple(f.get("linked_id") if isinstance(f, dict) else None
+                               for f in entry.get("fields") or [])
             if item_type == "Login" and isinstance(values, dict):
                 db[entry.get("id")] = _DbEntry(
                     "Login", reprompt, has_totp=values.get("totp") is not None,
                     # Old dbs store bare URI strings, which rbw treats as match_type None.
                     match_types=tuple(u.get("match_type") if isinstance(u, dict) else None
-                                      for u in values.get("uris") or []))
+                                      for u in values.get("uris") or []),
+                    linked_ids=linked_ids)
             else:
-                db[entry.get("id")] = _DbEntry(str(item_type), reprompt)
+                db[entry.get("id")] = _DbEntry(str(item_type), reprompt, linked_ids=linked_ids)
         return db
 
 
@@ -343,9 +356,61 @@ def _match_mode(match_type: object) -> MatchMode | None:
     return _MATCH_TYPES.get(match_type, MatchMode.NEVER)
 
 
-def _values(cls: type[_S], data: dict[str, Any]) -> _S:
-    """``cls`` with each of its fields taken from rbw's key of the same name."""
-    return cls(**{f.name: _text(data.get(f.name)) for f in fields(cls)})
+def _values(cls: type[_S], data: dict[str, Any], custom: tuple[CustomField, ...]) -> _S:
+    """``cls`` with its Custom fields, and each value from rbw's key of the same name."""
+    return cls(fields=custom, **{f.name: _text(data.get(f.name))
+                                 for f in fields(cls) if f.name != "fields"})
+
+
+# Bitwarden's LinkedIdType -> the rbw key of the built-in value a linked field stands for.
+_LINKED_KEYS = {
+    100: "username", 101: "password",
+    300: "cardholder_name", 301: "exp_month", 302: "exp_year", 303: "code", 304: "brand",
+    305: "number",
+    400: "title", 401: "middle_name", 402: "address1", 403: "address2", 404: "address3",
+    405: "city", 406: "state", 407: "postal_code", 408: "country", 409: "company",
+    410: "email", 411: "phone", 412: "ssn", 413: "username", 414: "passport_number",
+    415: "license_number", 416: "first_name", 417: "last_name",
+}
+_IDENTITY_FULL_NAME = 418
+_FIELD_KINDS = {kind.value: kind for kind in FieldKind}
+
+
+def _custom_fields(raw: object, linked_ids: tuple[object, ...],
+                   data: dict[str, Any]) -> tuple[CustomField, ...]:
+    """The Item's Custom fields from ``rbw get --raw``, linked ones resolved.
+
+    rbw prints the fields in the db file's order, so the db's ``linked_id`` for
+    field i is ``linked_ids[i]``. If the two lists differ in length (the db file
+    is out of date), a linked field can't be resolved and is left out, as are
+    fields without a name or of an unknown kind.
+    """
+    raw = raw if isinstance(raw, list) else []
+    lined_up = len(raw) == len(linked_ids)
+    custom = []
+    for i, field in enumerate(raw):
+        if not isinstance(field, dict):
+            continue
+        name, kind = _text(field.get("name")), _FIELD_KINDS.get(str(field.get("type")))
+        if name is None or kind is None:
+            continue
+        if kind is FieldKind.LINKED:
+            value = _linked_value(linked_ids[i], data) if lined_up else None
+            if value is None:
+                continue
+        else:
+            value = _text(field.get("value"))
+        custom.append(CustomField(name, kind, value))
+    return tuple(custom)
+
+
+def _linked_value(linked_id: object, data: dict[str, Any]) -> str | None:
+    """The built-in value a linked field stands for, or None."""
+    if linked_id == _IDENTITY_FULL_NAME:
+        names = (_text(data.get(key)) for key in ("first_name", "middle_name", "last_name"))
+        return " ".join(name for name in names if name) or None
+    key = _LINKED_KEYS.get(linked_id) if isinstance(linked_id, int) else None
+    return _text(data.get(key)) if key is not None else None
 
 
 def _text(value: object) -> str | None:
