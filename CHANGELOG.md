@@ -6,7 +6,7 @@ All notable changes to qutewarden are listed here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
-## [0.1.0]
+## [0.1.0] - 2026-10-08
 
 The first release: v1 as described in [`docs/spec-v1.md`](docs/spec-v1.md).
 
