@@ -64,7 +64,7 @@ Finding fields (fill JavaScript):
 
 `fill`, `card` and `identity` also fill the chosen Item's custom fields.
 
-- A custom field fills an input whose `name`, `id`, label, `aria-label` or placeholder equals the field's name. The comparison is case-insensitive and ignores surrounding whitespace. Fields that don't match anything are skipped.
+- A custom field fills an input whose `name`, `id`, label, `aria-label` or placeholder equals the field's name. The comparison is case-insensitive and ignores surrounding whitespace. Only inputs in the built-in fill's scope count: the focused input's `<form>`, else its nearest ancestor that holds another field, else the whole page. Fields that don't match anything are skipped.
 - Kinds:
   - **text** and **hidden** set the input's value;
   - **boolean** sets a checkbox (or radio button) on or off;

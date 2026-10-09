@@ -3,20 +3,22 @@
 
 ``select_candidate`` is steps 1–3 of `fill` in the spec: read the page URL,
 unlock, work out the Candidates and pick one. ``fill_login`` sends the chosen
-Item's secrets to the page through the fill route (ADR-0002).
+Item's secrets to the page through the fill route (ADR-0002). ``pick_and_fill``
+is the whole of `card` and `identity`, whose Items have no URIs (ADR-0005).
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol, TypeVar
 
 from qutewarden import match
 from qutewarden.context import Context
 from qutewarden.errors import QutewardenError, UserCancelled
 from qutewarden.filljs import render_fill_js
 from qutewarden.fillroute import send_js
-from qutewarden.model import LoginItem, LoginSecrets
+from qutewarden.model import ItemSecrets, LoginItem, LoginSecrets
 
 if TYPE_CHECKING:
     from qutewarden.clipboard import Clipboard
@@ -112,6 +114,38 @@ def fill_login(ctx: Context, selection: Selection) -> None:
                         totp=secrets.totp, submit=ctx.config.submit_after_fill,
                         fields=secrets.fields)
     send_fill(ctx, js, f"filling {describe(item)}")
+
+
+class _PickableItem(Protocol):
+    @property
+    def id(self) -> str: ...
+    @property
+    def name(self) -> str: ...
+
+
+ItemT = TypeVar("ItemT", bound=_PickableItem)
+SecretsT = TypeVar("SecretsT", bound=ItemSecrets)
+
+
+def pick_and_fill(ctx: Context, *, item_type: str, items: Callable[[], Sequence[ItemT]],
+                  line: Callable[[ItemT], str], secrets_type: type[SecretsT],
+                  render: Callable[[str, SecretsT], str]) -> None:
+    """Unlock, pick one of ``items()`` and fill it; for Items picked without URI match.
+
+    The pick is the only guard (Security rule 5); ``render(origin, secrets)``
+    returns the fill script, which checks the origin again in the page.
+    """
+    origin = match.origin_of(ctx.qute.url or "")
+    ensure_unlocked(ctx)
+    choices = items()
+    if not choices:
+        raise QutewardenError(f"the vault has no {item_type} items")
+    item = choices[pick(ctx, item_type, [line(choice) for choice in choices])]
+    secrets = ctx.backend.get_secrets(item.id)
+    if not isinstance(secrets, secrets_type):
+        article = "an" if item_type[0] in "AEIOU" else "a"
+        raise QutewardenError(f"{item.name} isn't {article} {item_type} item")
+    send_fill(ctx, render(origin, secrets), f"filling {item.name}")
 
 
 def login_secrets(ctx: Context, item: LoginItem) -> LoginSecrets:

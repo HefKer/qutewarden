@@ -29,7 +29,7 @@ See [ADR-0001](docs/adr/0001-standalone-replacement-for-upstream-userscript.md) 
 
 The picker shows each Login item as `<name> — <username>`, and each Card item as `<name> — <brand> *<last 4>` (only `<name>` for a Re-prompt item, whose number would need the master password just to list it). An Identity item shows only `<name>`.
 
-`fill`, `card` and `identity` also fill the Item's custom fields: each fills the first input whose `name`, `id`, label, `aria-label` or placeholder equals the field's name (ignoring case and surrounding whitespace). Text and hidden fields set the input's value, a boolean field turns a checkbox or radio button on or off, and a linked field fills the built-in value it stands for. A custom field never overrides a field the built-in fill already filled, and one that matches nothing is skipped.
+`fill`, `vault`'s `Fill`, `card` and `identity` also fill the Item's custom fields: each fills the first input whose `name`, `id`, label, `aria-label` or placeholder equals the field's name (ignoring case and surrounding whitespace), looking only where the built-in fill looks: the focused input's form, else the nearest element around it that holds another field, else the whole page. Text and hidden fields set the input's value, a boolean field turns a checkbox or radio button on or off, and a linked field fills the built-in value it stands for. A custom field never overrides a field the built-in fill already filled, and one that matches nothing is skipped.
 
 ## Requirements
 

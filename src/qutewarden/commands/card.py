@@ -10,27 +10,19 @@ from __future__ import annotations
 
 import argparse
 
-from qutewarden import flow, match
+from qutewarden import flow
 from qutewarden.commands import register
 from qutewarden.context import Context
-from qutewarden.errors import QutewardenError
 from qutewarden.filljs import render_card_fill_js
 from qutewarden.model import CardItem, CardSecrets
 
 
 @register("card", help="Pick a Card item and fill the page's payment form (never submits)")
 def run(ctx: Context, args: argparse.Namespace) -> int:
-    origin = match.origin_of(ctx.qute.url or "")
-    flow.ensure_unlocked(ctx)
-    cards = ctx.backend.list_cards()
-    if not cards:
-        raise QutewardenError("the vault has no Card items")
-    card = cards[flow.pick(ctx, "Card", [card_line(c) for c in cards])]
-    secrets = ctx.backend.get_secrets(card.id)
-    if not isinstance(secrets, CardSecrets):
-        raise QutewardenError(f"{card.name} isn't a Card item")
-    flow.send_fill(ctx, render_card_fill_js(expected_origin=origin, card=secrets),
-                   f"filling {card.name}")
+    flow.pick_and_fill(ctx, item_type="Card", items=ctx.backend.list_cards, line=card_line,
+                       secrets_type=CardSecrets,
+                       render=lambda origin, card: render_card_fill_js(expected_origin=origin,
+                                                                       card=card))
     return 0
 
 

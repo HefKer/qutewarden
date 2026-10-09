@@ -39,7 +39,7 @@ def identity(ctx, fake_qutebrowser):
 def test_every_identity_item_is_offered_by_name(identity, fake_picker):
     assert identity() == 0
     assert fake_picker.prompts == ["Identity"]
-    assert fake_picker.lines == [["Me", "Work identity", "Locked identity"]]
+    assert fake_picker.lines == [["Me", "Work identity", "Re-prompt identity"]]
 
 
 def test_the_picked_identitys_custom_fields_go_into_the_script(identity, fake_qutebrowser):

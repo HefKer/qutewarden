@@ -40,7 +40,7 @@ def test_every_card_item_is_offered_with_brand_and_last_4_digits(card, fake_pick
     assert card() == 0
     assert fake_picker.prompts == ["Card"]
     assert fake_picker.lines == [["Visa — Visa *4242", "Work card — Mastercard *5454",
-                                  "Locked card", "No brand — *0005", "Bare card"]]
+                                  "Re-prompt card", "No brand — *0005", "Bare card"]]
 
 
 def test_the_picked_card_is_filled_with_its_values(card, fake_qutebrowser):

@@ -85,7 +85,7 @@ def test_list_cards_shows_brand_and_last_4_digits_only():
     cards = FakeBackend().list_cards()
     assert cards == list(FAKE_CARDS)
     assert all(SECRET_MARKER not in repr(card) for card in cards)
-    assert {card.id for card in cards if card.reprompt} == {"locked-card"}
+    assert {card.id for card in cards if card.reprompt} == {"reprompt-card"}
 
 
 def test_get_secrets_of_a_card_item_returns_card_values_with_the_marker():
@@ -101,7 +101,7 @@ def test_list_identities_shows_names_only():
     identities = FakeBackend().list_identities()
     assert identities == list(FAKE_IDENTITIES)
     assert all(isinstance(identity, IdentityItem) for identity in identities)
-    assert {identity.id for identity in identities if identity.reprompt} == {"locked-identity"}
+    assert {identity.id for identity in identities if identity.reprompt} == {"reprompt-identity"}
 
 
 def test_get_secrets_of_an_identity_item_returns_values_that_all_carry_the_marker():

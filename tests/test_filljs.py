@@ -888,6 +888,32 @@ def test_custom_fields_fill_on_a_page_without_login_fields(page):
     assert page.evaluate("window.submitted") == 0  # only a built-in fill submits
 
 
+OTHER_FORM = """() => document.body.insertAdjacentHTML("afterbegin",
+    '<form id="newsletter"><input type="text" name="team" id="team-b">'
+    + '<input type="text" name="branch" id="branch-b"></form>')"""
+
+
+def test_custom_fields_fill_only_the_form_the_built_in_fill_filled(page):
+    load(page, "login_custom.html")
+    page.evaluate(OTHER_FORM)
+    page.focus("#username")
+    fill_login(page, text("team", "core"))
+    assert values(page, "username", "team", "team-b") == {
+        "username": "alice", "team": "core", "team-b": ""}
+
+
+def test_custom_fields_stay_in_the_focused_inputs_form_when_the_built_in_fill_fills_nothing(
+        page):
+    load(page, "login_custom.html")
+    page.evaluate(OTHER_FORM)
+    page.evaluate("""() => { document.getElementById("username").remove();
+                             document.getElementById("password").remove(); }""")
+    page.focus("#team")
+    run_isolated(page, render_fill_js(expected_origin=ORIGIN, mode="auto", username=None,
+                                      password="QWSECRET-pw", fields=(text("branch", "b-1"),)))
+    assert values(page, "branch", "branch-b") == {"branch": "b-1", "branch-b": ""}
+
+
 def test_a_card_fill_also_fills_the_cards_custom_fields(page):
     load(page, "checkout.html")
     fill_card(page, dataclasses.replace(CARD, fields=(
@@ -916,10 +942,12 @@ def test_custom_fields_fill_only_the_document_the_built_in_fill_chose(page, focu
     frame = load_with_frame(page, f"{ORIGIN}/frame", host_form=True)
     page.evaluate("""() => document.querySelector("form").insertAdjacentHTML(
         "beforeend", '<input type="text" name="q" id="host-q">')""")
+    frame.evaluate("""() => document.getElementById("login").insertAdjacentHTML(
+        "beforeend", '<input type="text" name="q" id="frame-q">')""")
     if focus_frame:
         frame.focus("#password")
     fill_login(page, text("q", "QWSECRET-q"))
-    in_frame = frame_values(frame, "q")["q"]
+    in_frame = frame_values(frame, "frame-q")["frame-q"]
     in_host = values(page, "host-q")["host-q"]
     assert (in_frame, in_host) == (
         ("QWSECRET-q", "") if focus_frame else ("", "QWSECRET-q"))

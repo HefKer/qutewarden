@@ -86,14 +86,18 @@ function isSelect(el) {
   return Boolean(view) && el instanceof view.HTMLSelectElement;
 }
 
-// Set through the prototype's setter so framework value trackers (React)
-// notice the change, then fire bubbling input + change events.
-function setValue(el, value) {
+// Set `property` through the prototype's setter so framework value trackers
+// (React) notice the change, then fire bubbling input + change events.
+function setNative(el, property, value) {
   const view = viewOf(el);
   const proto = isSelect(el) ? view.HTMLSelectElement.prototype : view.HTMLInputElement.prototype;
-  Object.getOwnPropertyDescriptor(proto, "value").set.call(el, value);
+  Object.getOwnPropertyDescriptor(proto, property).set.call(el, value);
   el.dispatchEvent(new Event("input", { bubbles: true }));
   el.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+function setValue(el, value) {
+  setNative(el, "value", value);
 }
 
 // The focused input, if it is one we could fill (a focused search box or
@@ -430,10 +434,9 @@ const IDENTITY_WORDS = [
   [/\btitle\b|salutation|honorific/i, "honorific-prefix"],
 ];
 
-// Fill an Item that isn't a Login (a.mode "card" or "identity") into doc,
-// scoped by the focused field; return the fields filled. Never submits.
-function fillItem(doc, focused, a) {
-  const root = scopeFor(doc, focused, fillableControls);
+// Fill an Item that isn't a Login (a.mode "card" or "identity") into root,
+// the focused field's scope; return the fields filled. Never submits.
+function fillItem(root, a) {
   switch (a.mode) {
     case "card": return fillKinds(root, CARD_KINDS, CARD_WORDS, a.card);
     case "identity": return fillKinds(root, IDENTITY_KINDS, IDENTITY_WORDS, a.identity);
@@ -460,19 +463,16 @@ function namesOf(el) {
 }
 
 function setChecked(el, on) {
-  const proto = viewOf(el).HTMLInputElement.prototype;
-  Object.getOwnPropertyDescriptor(proto, "checked").set.call(el, on);
-  el.dispatchEvent(new Event("input", { bubbles: true }));
-  el.dispatchEvent(new Event("change", { bubbles: true }));
+  setNative(el, "checked", on);
 }
 
-// Fill `fields` into doc, leaving alone the fields in `filled` (what the
-// built-in fill filled: a Custom field never overrides it). Returns the
-// inputs filled.
-function fillCustomFields(doc, fields, filled) {
+// Fill `fields` into root (the built-in fill's scope), leaving alone the
+// fields in `filled` (what the built-in fill filled: a Custom field never
+// overrides it). Returns the inputs filled.
+function fillCustomFields(root, fields, filled) {
   const taken = new Set(filled);
   const done = [];
-  const inputs = usableInputs(doc);
+  const inputs = usableInputs(root);
   for (const field of fields || []) {
     const wanted = field.name.trim().toLowerCase();
     const boolean = field.kind === "boolean";
@@ -492,20 +492,23 @@ function fillCustomFields(doc, fields, filled) {
   return done;
 }
 
-// Run the built-in fill (`fillOne(target)`, returning the fields it filled) on
-// the targets until one fills something, then the Custom fields in that same
-// document. If the built-in fill finds nothing anywhere, the Custom fields
-// fill the first target where they match. Returns the built-in fields filled.
-function fillWithCustomFields(targets, fields, fillOne) {
+// Run the built-in fill (`fillOne(root, focused)`, returning the fields it
+// filled) on the targets until one fills something, then the Custom fields in
+// that same scope: `scopeOf(target)`, the focused input's form, else its
+// nearest ancestor holding another field, else the document. If the built-in
+// fill finds nothing anywhere, the Custom fields fill the first target's scope
+// where they match. Returns the built-in fields filled.
+function fillWithCustomFields(targets, fields, scopeOf, fillOne) {
   for (const target of targets) {
-    const filled = fillOne(target);
+    const root = scopeOf(target);
+    const filled = fillOne(root, target.focused);
     if (filled.length) {
-      fillCustomFields(target.doc, fields, filled);
+      fillCustomFields(root, fields, filled);
       return filled;
     }
   }
   for (const target of targets) {
-    if (fillCustomFields(target.doc, fields, []).length) break;
+    if (fillCustomFields(scopeOf(target), fields, []).length) break;
   }
   return [];
 }
@@ -658,7 +661,8 @@ function qutewardenFill(a) {
     // a purchase, and an identity fill is usually one step of a longer form
     // (ADR-0005).
     fillWithCustomFields(fillTargets(document, a.origin, focusedControl), a.fields,
-      ({ doc, focused }) => fillItem(doc, focused, a));
+      ({ doc, focused }) => scopeFor(doc, focused, fillableControls),
+      (root) => fillItem(root, a));
     return;
   }
   const targets = fillTargets(document, a.origin);
@@ -671,6 +675,7 @@ function qutewardenFill(a) {
     document.documentElement.removeAttribute(probeAttribute(a.probeNonce));
   }
   const filled = fillWithCustomFields(targets, a.fields,
-    ({ doc, focused }) => fillDocument(scopeFor(doc, focused), a, focused));
+    ({ doc, focused }) => scopeFor(doc, focused),
+    (root, focused) => fillDocument(root, a, focused));
   if (filled.length && a.submit) submitAfter(filled);
 }

@@ -10,8 +10,8 @@ qutebrowser logs every command a userscript sends it, word for word, to `qute://
 
 ## Consequences
 
-The fill only runs in the top-level frame, so login forms inside iframes can't be filled. The user gets a message saying so instead.
+The fill JavaScript runs in the top-level frame. From there it reaches same-origin iframes and fills forms in them (see the v2 amendment); cross-origin iframes are out of its reach and are left alone, with no message.
 
 ## Amendment (v2): same-origin iframes
 
-The fill still runs in the top-level frame, but from there it also reaches the documents of same-origin iframes (`frame.contentDocument`) and fills a login form in one of them, after checking that document's own `location.origin`. Cross-origin iframes stay out of reach.
+The fill still runs in the top-level frame, but from there it also reaches the documents of same-origin iframes (`frame.contentDocument`) and fills a form in one of them, after checking that document's own `location.origin`. Every Fill does this: `fill`, `vault`, `totp`, `generate`, `card` and `identity`. Cross-origin iframes stay out of reach.
