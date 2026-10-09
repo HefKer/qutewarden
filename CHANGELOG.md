@@ -19,23 +19,16 @@ The first release: v1 as described in [`docs/spec-v1.md`](docs/spec-v1.md).
 - `unlock`, `lock`, `sync` and `status`.
 - URI match with Bitwarden's match modes (`base_domain`, `host`, `starts_with`, `exact`, `regular_expression`, `never`).
 - Secrets reach the page through a private named pipe, never through a qutebrowser command, and the page's origin is checked again inside the page just before filling.
-- The `rbw` backend (rbw ≥ 1.15).
+- The rbw Backend (rbw ≥ 1.15), the only Backend. There is no `backend` setting; a config file that sets one fails with an error saying the setting was removed.
 - A TOML config file, with every setting also available as a flag.
-- A Nix flake and a Python package that install a single `qutewarden` command.
+- A Nix flake (Linux only) and a Python package that install a single `qutewarden` command.
 - `CHANGELOG.md`, `SECURITY.md` and GitHub issue templates.
-
-### Changed
-
-- The flake builds for Linux systems only; the darwin systems are gone. qutewarden relies on `$XDG_RUNTIME_DIR`, Wayland and X11, and has never run on macOS.
-
-### Removed
-
-- The `backend` setting and its `--backend` flag. A config file that still sets `backend` fails with an error saying the setting was removed.
 
 ### Fixed
 
 - `generate` no longer fills the picked username into a focused input that doesn't look like a username field, such as a search box.
 - The fuzzel confirmation for a Mismatch fill is always wide enough to read, whatever `fuzzel.ini` sets.
+- The GLOSSARY and the README's Security rule 5 describe the Mismatch fill confirmation as it now looks: the Item's URIs host first next to the page's address, never shortened.
 
 [Unreleased]: https://github.com/HefKer/qutewarden/compare/0.1.0...HEAD
 [0.1.0]: https://github.com/HefKer/qutewarden/releases/tag/0.1.0
