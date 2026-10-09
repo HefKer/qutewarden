@@ -12,26 +12,23 @@ from __future__ import annotations
 
 import argparse
 
-from qutewarden import flow, match
+from qutewarden import flow
 from qutewarden.commands import register
 from qutewarden.context import Context
-from qutewarden.errors import QutewardenError
 from qutewarden.filljs import render_identity_fill_js
-from qutewarden.model import IdentitySecrets
+from qutewarden.model import IdentityItem, IdentitySecrets
 
 
 @register("identity",
           help="Pick an Identity item and fill the page's address form (never submits)")
 def run(ctx: Context, args: argparse.Namespace) -> int:
-    origin = match.origin_of(ctx.qute.url or "")
-    flow.ensure_unlocked(ctx)
-    identities = ctx.backend.list_identities()
-    if not identities:
-        raise QutewardenError("the vault has no Identity items")
-    identity = identities[flow.pick(ctx, "Identity", [i.name for i in identities])]
-    secrets = ctx.backend.get_secrets(identity.id)
-    if not isinstance(secrets, IdentitySecrets):
-        raise QutewardenError(f"{identity.name} isn't an Identity item")
-    flow.send_fill(ctx, render_identity_fill_js(expected_origin=origin, identity=secrets),
-                   f"filling {identity.name}")
+    flow.pick_and_fill(ctx, item_type="Identity", items=ctx.backend.list_identities,
+                       line=_identity_line, secrets_type=IdentitySecrets,
+                       render=lambda origin, identity: render_identity_fill_js(
+                           expected_origin=origin, identity=identity))
     return 0
+
+
+def _identity_line(identity: IdentityItem) -> str:
+    """The Item name only: every value of an Identity item is a secret (Security rule 6)."""
+    return identity.name
