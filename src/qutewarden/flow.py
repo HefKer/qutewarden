@@ -103,12 +103,14 @@ def candidate_line(candidate: match.Candidate) -> str:
 
 
 def fill_login(ctx: Context, selection: Selection) -> None:
-    """Fill the chosen Item; the script decides between login and OTP in the page."""
+    """Fill the chosen Item and its Custom fields; the script decides between login and
+    OTP in the page."""
     item = selection.item
     secrets = login_secrets(ctx, item)
     js = render_fill_js(expected_origin=selection.origin, mode="auto",
                         username=item.username, password=secrets.password,
-                        totp=secrets.totp, submit=ctx.config.submit_after_fill)
+                        totp=secrets.totp, submit=ctx.config.submit_after_fill,
+                        fields=secrets.fields)
     send_fill(ctx, js, f"filling {describe(item)}")
 
 

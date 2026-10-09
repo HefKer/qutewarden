@@ -29,6 +29,8 @@ See [ADR-0001](docs/adr/0001-standalone-replacement-for-upstream-userscript.md) 
 
 The picker shows each Login item as `<name> — <username>`, and each Card item as `<name> — <brand> *<last 4>` (only `<name>` for a Re-prompt item, whose number would need the master password just to list it). An Identity item shows only `<name>`.
 
+`fill`, `card` and `identity` also fill the Item's custom fields: each fills the first input whose `name`, `id`, label, `aria-label` or placeholder equals the field's name (ignoring case and surrounding whitespace). Text and hidden fields set the input's value, a boolean field turns a checkbox or radio button on or off, and a linked field fills the built-in value it stands for. A custom field never overrides a field the built-in fill already filled, and one that matches nothing is skipped.
+
 ## Requirements
 
 - **Linux only.** qutewarden relies on `$XDG_RUNTIME_DIR`, Wayland and X11, and has never run on macOS.
@@ -186,7 +188,7 @@ By default qutewarden keeps to these rules:
 5. A Fill of a Login item happens only when the page's origin, checked again inside the page just before filling, is the origin the userscript was started on, **and** the Item matches the page. The only exception is a Mismatch fill from `vault` that you confirmed after seeing the Item's URIs next to the page's address, all shown host first (or verbatim where that can't be done safely) and never shortened. A Fill of a Card item or Identity item happens only after you picked it, and it too only after the origin check inside the page ([ADR-0005](docs/adr/0005-card-and-identity-items-are-filled-outside-uri-match.md)).
 6. Messages show Item names, usernames and origins, never passwords, TOTP codes, notes or custom fields. For a Card item, a message or picker line may include the brand and the last 4 digits of the number, never more of it, and never the security code or expiry. The values of an Identity item count as secrets: messages and picker lines show only its name.
 
-The no-leak test runs every subcommand against a fake vault and fails if a placeholder secret (a password, TOTP code, card number, security code or identity value) shows up in the FIFO, a child process's arguments or environment, a message or a picker line.
+The no-leak test runs every subcommand against a fake vault and fails if a placeholder secret (a password, TOTP code, card number, security code, identity value or custom field value) shows up in the FIFO, a child process's arguments or environment, a message or a picker line.
 
 Limits:
 

@@ -21,7 +21,10 @@
     "passport_number": null,
     "username": "alice"
   },
-  "fields": [],
+  "fields": [
+    {"name": "Full name", "value": null, "type": "linked"},
+    {"name": "newsletter", "value": "true", "type": "boolean"}
+  ],
   "notes": null,
   "history": []
 }

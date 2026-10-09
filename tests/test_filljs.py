@@ -16,7 +16,7 @@ from qutewarden.filljs import (
     render_identity_fill_js,
     render_probe_js,
 )
-from qutewarden.model import CardSecrets, IdentitySecrets
+from qutewarden.model import CardSecrets, CustomField, FieldKind, IdentitySecrets
 
 pytestmark = pytest.mark.browser
 sync_api = pytest.importorskip("playwright.sync_api")
@@ -808,3 +808,118 @@ def test_an_identity_fill_on_another_origin_fills_nothing(page):
     load(page, "address.html", origin="https://evil.example.test")
     fill_identity(page)
     assert values(page, "given-name", "email") == {"given-name": "", "email": ""}
+
+
+# --- Custom fields (#37) --------------------------------------------------------
+
+def text(name: str, value: str) -> CustomField:
+    return CustomField(name, FieldKind.TEXT, value)
+
+
+def checked(page, *ids: str) -> dict[str, bool]:
+    return {i: page.eval_on_selector(f"#{i}", "el => el.checked") for i in ids}
+
+
+def fill_login(page, *fields: CustomField, submit: bool = False):
+    run_isolated(page, render_fill_js(
+        expected_origin=ORIGIN, mode="auto", username="alice", password="QWSECRET-pw",
+        submit=submit, fields=fields))
+
+
+def test_custom_fields_match_name_id_label_aria_label_and_placeholder(page):
+    load(page, "login_custom.html")
+    fill_login(page, text("team", "core"),
+               CustomField("member-id", FieldKind.HIDDEN, "QWSECRET-member"),
+               CustomField("  BACKUP CODE ", FieldKind.HIDDEN, "QWSECRET-backup"),
+               text("customer number", "c-42"),
+               CustomField("Branch", FieldKind.LINKED, "alice"))
+    assert values(page, "team", "Member-ID", "backup", "customer", "branch", "other") == {
+        "team": "core", "Member-ID": "QWSECRET-member", "backup": "QWSECRET-backup",
+        "customer": "c-42", "branch": "alice", "other": ""}
+    assert ["team", "input"] in page.evaluate("window.events")
+
+
+def test_boolean_custom_fields_turn_checkboxes_and_radio_buttons_on_and_off(page):
+    load(page, "login_custom.html")
+    fill_login(page, CustomField("remember", FieldKind.BOOLEAN, "true"),
+               CustomField("Terms", FieldKind.BOOLEAN, "false"),
+               CustomField("plan-pro", FieldKind.BOOLEAN, "true"))
+    assert checked(page, "remember", "terms", "plan-pro", "plan-free") == {
+        "remember": True, "terms": False, "plan-pro": True, "plan-free": False}
+    assert ["remember", "change"] in page.evaluate("window.events")
+
+
+def test_a_custom_field_never_overrides_what_the_built_in_fill_filled(page):
+    load(page, "login_custom.html")
+    fill_login(page, text("login", "QWSECRET-not-the-username"),
+               CustomField("Password", FieldKind.HIDDEN, "QWSECRET-not-the-password"))
+    assert values(page, "username", "password") == {
+        "username": "alice", "password": "QWSECRET-pw"}
+
+
+def test_a_boolean_custom_field_never_sets_a_text_input_nor_text_a_checkbox(page):
+    load(page, "login_custom.html")
+    fill_login(page, CustomField("team", FieldKind.BOOLEAN, "true"), text("remember", "x"))
+    assert values(page, "team", "remember") == {"team": "", "remember": "on"}
+    assert checked(page, "remember") == {"remember": False}
+
+
+def test_custom_fields_that_match_nothing_are_skipped(page):
+    load(page, "login_custom.html")
+    fill_login(page, text("no such field", "QWSECRET-x"), text("team", "core"))
+    assert values(page, "username", "team", "other") == {
+        "username": "alice", "team": "core", "other": ""}
+
+
+def test_custom_fields_are_filled_before_the_form_is_submitted(page):
+    load(page, "login_custom.html")
+    fill_login(page, text("team", "core"), submit=True)
+    page.wait_for_function("window.submitted === 1")
+    assert page.evaluate("window.submittedTeam") == "core"
+
+
+def test_custom_fields_fill_on_a_page_without_login_fields(page):
+    load(page, "login_custom.html")
+    page.evaluate("""() => { document.getElementById("username").remove();
+                             document.getElementById("password").remove(); }""")
+    fill_login(page, text("branch", "QWSECRET-branch"), submit=True)
+    assert values(page, "branch", "team") == {"branch": "QWSECRET-branch", "team": ""}
+    page.wait_for_timeout(100)
+    assert page.evaluate("window.submitted") == 0  # only a built-in fill submits
+
+
+def test_a_card_fill_also_fills_the_cards_custom_fields(page):
+    load(page, "checkout.html")
+    fill_card(page, dataclasses.replace(CARD, fields=(
+        text("promo", "QWSECRET-promo"), text("cc-number", "QWSECRET-not-the-number"))))
+    assert values(page, "promo", "cc-number") == {
+        "promo": "QWSECRET-promo", "cc-number": "4242424242424242"}
+
+
+def test_an_identity_fill_also_fills_the_identitys_custom_fields(page):
+    load(page, "address.html")
+    fill_identity(page, dataclasses.replace(IDENTITY, fields=(
+        CustomField("Gift message", FieldKind.HIDDEN, "QWSECRET-gift"),
+        text("email", "QWSECRET-not-the-email"))))
+    assert values(page, "gift", "email") == {
+        "gift": "QWSECRET-gift", "email": "alice@example.com"}
+
+
+def test_custom_fields_on_another_origin_fill_nothing(page):
+    load(page, "login_custom.html", origin="https://evil.example.test")
+    fill_login(page, text("team", "core"))
+    assert values(page, "team") == {"team": ""}
+
+
+@pytest.mark.parametrize("focus_frame", [False, True])
+def test_custom_fields_fill_only_the_document_the_built_in_fill_chose(page, focus_frame):
+    frame = load_with_frame(page, f"{ORIGIN}/frame", host_form=True)
+    page.evaluate("""() => document.querySelector("form").insertAdjacentHTML(
+        "beforeend", '<input type="text" name="q" id="host-q">')""")
+    if focus_frame:
+        frame.focus("#password")
+    fill_login(page, text("q", "QWSECRET-q"))
+    in_frame = frame_values(frame, "q")["q"]
+    in_host = values(page, "host-q")["host-q"]
+    assert (in_frame, in_host) == (
+        ("QWSECRET-q", "") if focus_frame else ("", "QWSECRET-q"))

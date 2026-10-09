@@ -245,12 +245,16 @@ function focusedControl(doc) {
 
 // The text of the field's labels, without that of controls inside them
 // (a <select> in its <label> would add every option).
-function labelText(el) {
+function labelTexts(el) {
   return Array.from(el.labels || []).map((label) => {
     const copy = label.cloneNode(true);
     for (const inner of copy.querySelectorAll("input, select, textarea, button")) inner.remove();
     return copy.textContent;
-  }).join(" ");
+  });
+}
+
+function labelText(el) {
+  return labelTexts(el).join(" ");
 }
 
 function describeField(el) {
@@ -437,6 +441,75 @@ function fillItem(doc, focused, a) {
   return [];
 }
 
+// --- Custom fields ----------------------------------------------------------------
+//
+// `a.fields` is the Item's Custom fields that have a value: {name, kind, value},
+// kind "text", "hidden", "boolean" or "linked" (whose value Python already
+// resolved to the built-in value it stands for). A field fills the first input
+// whose name, id, label, aria-label or placeholder equals its name, ignoring
+// case and surrounding whitespace; a boolean ("true"/"false") only a checkbox
+// or radio button, the others only an input that takes text.
+
+const CHECKABLE_TYPES = ["checkbox", "radio"];
+const NOT_TEXT_TYPES = [...CHECKABLE_TYPES, "file", "submit", "reset", "button", "image",
+  "range", "color"];
+
+function namesOf(el) {
+  return [el.name, el.id, ...labelTexts(el), el.getAttribute("aria-label"),
+    el.getAttribute("placeholder")].map((text) => (text || "").trim().toLowerCase());
+}
+
+function setChecked(el, on) {
+  const proto = viewOf(el).HTMLInputElement.prototype;
+  Object.getOwnPropertyDescriptor(proto, "checked").set.call(el, on);
+  el.dispatchEvent(new Event("input", { bubbles: true }));
+  el.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+// Fill `fields` into doc, leaving alone the fields in `filled` (what the
+// built-in fill filled: a Custom field never overrides it). Returns the
+// inputs filled.
+function fillCustomFields(doc, fields, filled) {
+  const taken = new Set(filled);
+  const done = [];
+  const inputs = usableInputs(doc);
+  for (const field of fields || []) {
+    const wanted = field.name.trim().toLowerCase();
+    const boolean = field.kind === "boolean";
+    const el = wanted && inputs.find((input) => !taken.has(input)
+      && (boolean ? CHECKABLE_TYPES.includes(inputType(input))
+        : !NOT_TEXT_TYPES.includes(inputType(input)))
+      && namesOf(input).includes(wanted));
+    if (!el) continue;
+    if (boolean) {
+      setChecked(el, field.value.trim().toLowerCase() === "true");
+    } else {
+      setValue(el, field.value);
+    }
+    taken.add(el);
+    done.push(el);
+  }
+  return done;
+}
+
+// Run the built-in fill (`fillOne(target)`, returning the fields it filled) on
+// the targets until one fills something, then the Custom fields in that same
+// document. If the built-in fill finds nothing anywhere, the Custom fields
+// fill the first target where they match. Returns the built-in fields filled.
+function fillWithCustomFields(targets, fields, fillOne) {
+  for (const target of targets) {
+    const filled = fillOne(target);
+    if (filled.length) {
+      fillCustomFields(target.doc, fields, filled);
+      return filled;
+    }
+  }
+  for (const target of targets) {
+    if (fillCustomFields(target.doc, fields, []).length) break;
+  }
+  return [];
+}
+
 // Submit controls for pages without a <form>, best first. Each selector is
 // tried across every ancestor before the next one, so a real submit button
 // further out beats a generic button next to the field.
@@ -584,9 +657,8 @@ function qutewardenFill(a) {
     // Never submits, whatever `a.submit` says: an unwanted card submit can be
     // a purchase, and an identity fill is usually one step of a longer form
     // (ADR-0005).
-    for (const { doc, focused } of fillTargets(document, a.origin, focusedControl)) {
-      if (fillItem(doc, focused, a).length) return;
-    }
+    fillWithCustomFields(fillTargets(document, a.origin, focusedControl), a.fields,
+      ({ doc, focused }) => fillItem(doc, focused, a));
     return;
   }
   const targets = fillTargets(document, a.origin);
@@ -598,11 +670,7 @@ function qutewardenFill(a) {
   if (a.probeNonce && location.origin === a.origin) {
     document.documentElement.removeAttribute(probeAttribute(a.probeNonce));
   }
-  for (const { doc, focused } of targets) {
-    const filled = fillDocument(scopeFor(doc, focused), a, focused);
-    if (filled.length) {
-      if (a.submit) submitAfter(filled);
-      return;
-    }
-  }
+  const filled = fillWithCustomFields(targets, a.fields,
+    ({ doc, focused }) => fillDocument(scopeFor(doc, focused), a, focused));
+  if (filled.length && a.submit) submitAfter(filled);
 }

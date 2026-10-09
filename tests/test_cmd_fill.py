@@ -54,6 +54,14 @@ def test_the_picked_candidate_is_filled_with_password_and_totp(fill, fake_qutebr
     assert '"mode": "auto"' in js
 
 
+def test_the_picked_candidates_custom_fields_go_into_the_script(fill, fake_qutebrowser):
+    assert fill(picker=FakePicker(choices=[1])) == 0
+    [js] = fake_qutebrowser.js
+    assert ('{"name": "recovery", "kind": "hidden", "value": "QWSECRET-hidden-github-alt"}'
+            in js)
+    assert '{"name": "team", "kind": "text", "value": "QWSECRET-text-github-alt"}' in js
+
+
 def test_the_fill_is_announced_before_the_script_is_sent(fill, fake_qutebrowser):
     fill(picker=FakePicker(choices=[1]))
     assert fake_qutebrowser.messages == [("info", "qutewarden: filling GitHub (work) (alice-work)")]

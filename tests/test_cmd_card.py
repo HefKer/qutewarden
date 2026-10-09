@@ -53,6 +53,13 @@ def test_the_picked_card_is_filled_with_its_values(card, fake_qutebrowser):
     assert '"expMonth": "11", "expYear": "2031"' in js
 
 
+def test_the_picked_cards_custom_fields_go_into_the_script(card, fake_qutebrowser):
+    assert card(picker=FakePicker(choices=[1])) == 0
+    [js] = fake_qutebrowser.js
+    assert ('{"name": "recovery", "kind": "hidden", "value": "QWSECRET-hidden-work-card"}'
+            in js)
+
+
 def test_the_fill_message_names_the_card_only(card, fake_qutebrowser):
     card(picker=FakePicker(choices=[1]))
     assert fake_qutebrowser.messages == [("info", "qutewarden: filling Work card")]

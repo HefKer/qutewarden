@@ -124,6 +124,20 @@ def test_fill_reaches_a_login_form_in_a_same_origin_iframe(
     assert run.messages() == [("INFO", "qutewarden: filling Single S (sam)")]
 
 
+def test_fill_also_fills_the_items_custom_fields_with_linked_ones_resolved(
+        qb: Qutebrowser, pages: PageServer, picker: Picker, vault: SeededVault,
+        unlocked: None):
+    page = qb.open(pages, "http://login.example.com/login_custom.html")
+    run = qb.spawn("fill")
+    picker.choose(vault.a.line, expect_lines=[vault.a.line, vault.b.line])
+    run.wait()
+    fields = page.wait_fields(_filled, "the password to be filled")
+    values = {f.name: f.value for f in vault.a.fields}
+    assert (fields["password"], fields["pin"], fields["question"], fields["holder"]) == (
+        vault.a.password, values["pin"], values["question"], "alice")
+    assert run.messages() == [("INFO", "qutewarden: filling Example A (alice)")]
+
+
 def test_submit_after_fill_submits_the_form(
         qb: Qutebrowser, pages: PageServer, unlocked: None):
     page = qb.open(pages, SINGLE)

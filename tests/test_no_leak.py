@@ -4,9 +4,9 @@ Runs every registered subcommand, under several config variants, against the
 fake Backend and fails if a placeholder secret (``SECRET_MARKER``) shows up
 anywhere it must not: lines sent to QUTE_FIFO (messages included), picker
 prompts and lines, a child process's argv or environment, or our own
-stdout/stderr. The fake Card items' numbers and security codes, and every value
-of the fake Identity items, carry the marker too; only a card's last 4 digits
-may reach a picker line.
+stdout/stderr. The fake Card items' numbers and security codes, every value
+of the fake Identity items, and every fake Item's text and hidden Custom field
+values carry the marker too; only a card's last 4 digits may reach a picker line.
 
 Subcommands are taken from ``all_commands()`` at collection time, so a new
 ``commands/*.py`` is covered without touching this file.

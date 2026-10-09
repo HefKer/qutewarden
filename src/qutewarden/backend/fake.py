@@ -15,6 +15,8 @@ from qutewarden.backend.base import (
 from qutewarden.model import (
     CardItem,
     CardSecrets,
+    CustomField,
+    FieldKind,
     IdentityItem,
     IdentitySecrets,
     ItemSecrets,
@@ -35,6 +37,13 @@ def fake_password(item_id: str) -> str:
 
 def fake_totp(item_id: str) -> str:
     return f"QWSECRET-totp-{item_id}"
+
+
+def fake_fields(item_id: str) -> tuple[CustomField, ...]:
+    """Every fake Item's Custom fields; the text and hidden values contain SECRET_MARKER."""
+    return (CustomField("recovery", FieldKind.HIDDEN, f"{SECRET_MARKER}-hidden-{item_id}"),
+            CustomField("team", FieldKind.TEXT, f"{SECRET_MARKER}-text-{item_id}"),
+            CustomField("remember", FieldKind.BOOLEAN, "true"))
 
 
 FAKE_ITEMS: tuple[LoginItem, ...] = (
@@ -79,7 +88,7 @@ def fake_card(item_id: str) -> CardSecrets:
     if "number" in values:
         values["number"] = f"{SECRET_MARKER}-{values['number']}"
         values["code"] = f"{SECRET_MARKER}-code-{item_id}"
-    return CardSecrets(**values)
+    return CardSecrets(**values, fields=fake_fields(item_id))
 
 
 FAKE_IDENTITIES: tuple[IdentityItem, ...] = (
@@ -103,7 +112,8 @@ _IDENTITY_VALUES: dict[str, dict[str, str]] = {
 def fake_identity(item_id: str) -> IdentitySecrets:
     """The Identity item's values; every one of them contains SECRET_MARKER."""
     return IdentitySecrets(**{key: f"{SECRET_MARKER}-{value}"
-                              for key, value in _IDENTITY_VALUES[item_id].items()})
+                              for key, value in _IDENTITY_VALUES[item_id].items()},
+                           fields=fake_fields(item_id))
 
 
 class FakeBackend(Backend):
@@ -171,7 +181,8 @@ class FakeBackend(Backend):
             return fake_identity(item_id)
         item = self._item(item_id)
         return LoginSecrets(password=fake_password(item.id),
-                       totp=fake_totp(item.id) if item.has_totp else None)
+                            totp=fake_totp(item.id) if item.has_totp else None,
+                            fields=fake_fields(item.id))
 
     def create_login(self, *, name: str, username: str | None, uri: str,
                      password: str) -> None:
