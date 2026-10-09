@@ -169,6 +169,8 @@ Limits:
 - **`generate` saves before it fills**, so a failed save never leaves you with a password that exists only in the form. To create a new Item it runs twice: the first run copies the page's username into a `data-qutewarden-probe-<nonce>` attribute and spawns `qutewarden generate … --username-probe <nonce>`, which reads it from qutebrowser's DOM dump; the password is generated only in that second run ([ADR-0004](docs/adr/0004-generate-reads-the-username-back-through-the-dom-dump.md)). If no username comes back, the picker asks for it.
 - qutewarden relies on the layout of rbw's local db file for URI match modes ([ADR-0003](docs/adr/0003-rbw-1-15-and-match-types-from-its-db.md)); it only ever reads that file.
 
+To report a vulnerability, see [`SECURITY.md`](SECURITY.md).
+
 ## Development
 
 ```sh
@@ -182,6 +184,10 @@ git config core.hooksPath .githooks             # once per clone: run scripts/ch
 CI runs `scripts/check` and `nix build` on every PR.
 
 Before a release, go through the manual [end-to-end checklist](docs/e2e-checklist.md) in a real qutebrowser. Vocabulary is in [`GLOSSARY.md`](GLOSSARY.md), decisions in [`docs/adr/`](docs/adr/).
+
+## Changes and issues
+
+Releases are listed in [`CHANGELOG.md`](CHANGELOG.md). Bugs and feature requests go in [GitHub issues](https://github.com/HefKer/qutewarden/issues/new/choose), which offer a template for each.
 
 ## License
 
