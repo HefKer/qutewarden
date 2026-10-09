@@ -9,6 +9,7 @@ All notable changes to qutewarden are listed here. The format follows [Keep a Ch
 ### Added
 
 - A home-manager module, `homeManagerModules.default` (`programs.qutewarden`): installs qutewarden, links it as a qutebrowser userscript, writes `settings` to the config file and adds `keyBindings` to `programs.qutebrowser`.
+- `fill`, `totp` and `generate` also fill forms inside iframes that have the page's origin. Each frame's origin is checked before it is filled; cross-origin iframes are left alone.
 
 ## [0.1.0] - 2026-10-08
 
