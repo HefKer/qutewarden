@@ -197,12 +197,13 @@ Most of the code, tests and docs were written by AI coding agents (Claude Code),
 ```sh
 nix develop -c scripts/check                    # ruff, pyright, full suite (incl. Playwright/Chromium tests of the fill JS)
 nix develop -c scripts/check -m "not browser"   # same, tests without the browser
+nix develop -c scripts/check --e2e              # also the e2e suite: real qutebrowser and rbw, local Vaultwarden
 nix develop -c qutewarden-dev <subcommand>      # run this checkout's src/ against your real rbw
 nix build                                       # the package; ./result/bin/qutewarden
 git config core.hooksPath .githooks             # once per clone: run scripts/check before each commit
 ```
 
-CI runs `scripts/check` and `nix build` on every PR. Before a release, go through the manual [end-to-end checklist](docs/e2e-checklist.md) in a real qutebrowser.
+CI runs `scripts/check`, `nix build`, `nix flake check` and, as a separate job, the e2e suite on every PR. The e2e suite ([ADR-0007](docs/adr/0007-e2e-tests-run-real-rbw-and-qutebrowser-against-a-local-vaultwarden.md), `tests/e2e/`) runs offscreen qutebrowser and rbw against a throwaway Vaultwarden on 127.0.0.1, with its own rbw profile and XDG dirs under `/tmp`; it never touches your own vault. Before a release, go through the manual [smoke test](docs/e2e-checklist.md) in a real qutebrowser.
 
 The design is in [`docs/spec-v1.md`](docs/spec-v1.md) and [`docs/spec-v2.md`](docs/spec-v2.md), the vocabulary in [`GLOSSARY.md`](GLOSSARY.md).
 

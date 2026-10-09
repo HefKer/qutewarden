@@ -17,6 +17,21 @@ from qutewarden.match import make_suffix_extractor
 from qutewarden.qute import Qute
 
 
+def pytest_addoption(parser: pytest.Parser) -> None:
+    parser.addoption("--e2e", action="store_true",
+                     help="also run the e2e suite in tests/e2e (ADR-0007)")
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    """Leave out the e2e tests unless --e2e is given."""
+    if config.getoption("--e2e"):
+        return
+    e2e = [item for item in items if item.get_closest_marker("e2e")]
+    if e2e:
+        config.hook.pytest_deselected(items=e2e)
+        items[:] = [item for item in items if not item.get_closest_marker("e2e")]
+
+
 @pytest.fixture
 def fake_qutebrowser(tmp_path: Path) -> Iterator[FakeQutebrowser]:
     qb = FakeQutebrowser(tmp_path)
