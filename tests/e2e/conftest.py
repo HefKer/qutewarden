@@ -10,6 +10,7 @@ fixtures below, which reset what one test may leave behind.
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import tempfile
@@ -53,7 +54,8 @@ def _write_qutewarden_config(dirs: Dirs, picker: Picker) -> None:
     config.write_text(
         f'picker = ["{picker.path}"]\n'
         f"[totp]\nclipboard_clear_seconds = {harness.CLEAR_SECONDS}\n"
-        f"[vault]\ncopy_clear_seconds = {harness.CLEAR_SECONDS}\n")
+        f"[vault]\ncopy_clear_seconds = {harness.CLEAR_SECONDS}\n"
+        f"[matching]\nequivalent_domains = {json.dumps(harness.EQUIVALENT_DOMAINS)}\n")
 
 
 def _qutebrowser_settings() -> list[tuple[str, str]]:

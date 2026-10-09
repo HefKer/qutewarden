@@ -25,13 +25,18 @@ class ConfigError(QutewardenError):
 class Setting:
     key: str  # dotted TOML key, e.g. "generator.length"
     attr: str  # Config attribute, e.g. "generator_length"
-    type: type  # bool | int | str | MatchMode | tuple (picker)
+    type: type  # bool | int | str | MatchMode | tuple (picker) | list (domain groups)
     default: object
     help: str
 
     @property
     def flag(self) -> str:
         return "--" + self.key.replace(".", "-").replace("_", "-")
+
+    @property
+    def has_flag(self) -> bool:
+        """False for config-only settings (lists of domain groups)."""
+        return self.type is not list
 
 
 SETTINGS: tuple[Setting, ...] = (
@@ -45,6 +50,10 @@ SETTINGS: tuple[Setting, ...] = (
             "submit the form after filling"),
     Setting("matching.default_mode", "matching_default_mode", MatchMode, MatchMode.BASE_DOMAIN,
             "URI match mode for URIs without one"),
+    Setting("matching.global_equivalent_domains", "matching_global_equivalent_domains", bool,
+            True, "use Bitwarden's global Equivalent domains"),
+    Setting("matching.equivalent_domains", "matching_equivalent_domains", list, (),
+            "your own Equivalent domains: a list of lists of base domains (config only)"),
     Setting("generator.length", "generator_length", int, 24, "generated password length (>= 4)"),
     Setting("generator.uppercase", "generator_uppercase", bool, True, "use uppercase letters"),
     Setting("generator.lowercase", "generator_lowercase", bool, True, "use lowercase letters"),
@@ -68,6 +77,8 @@ class Config:
     insert_mode_after_fill: bool = True
     submit_after_fill: bool = False
     matching_default_mode: MatchMode = MatchMode.BASE_DOMAIN
+    matching_global_equivalent_domains: bool = True
+    matching_equivalent_domains: tuple[tuple[str, ...], ...] = ()
     generator_length: int = 24
     generator_uppercase: bool = True
     generator_lowercase: bool = True
@@ -156,6 +167,12 @@ def _coerce(setting: Setting, raw: object) -> object:
         if not argv:
             raise ConfigError(f"{setting.key} must not be empty")
         return argv
+    if t is list:
+        if not isinstance(raw, (list, tuple)) or not all(
+                isinstance(group, (list, tuple)) and all(isinstance(d, str) and d for d in group)
+                for group in raw):
+            raise ConfigError(f"{setting.key} must be a list of lists of base domains")
+        return tuple(tuple(group) for group in raw)
     if t is bool:
         if not isinstance(raw, bool):
             raise ConfigError(f"{setting.key} must be true or false")

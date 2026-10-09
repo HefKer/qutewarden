@@ -49,7 +49,7 @@ def test_default_items_give_the_documented_candidates(tmp_path, page_url, expect
     from qutewarden.match import candidates, make_suffix_extractor
     found = candidates(FAKE_ITEMS, page_url, default_mode=MatchMode.BASE_DOMAIN,
                        extractor=make_suffix_extractor(tmp_path, offline=True))
-    assert [item.id for item in found] == expected
+    assert [c.item.id for c in found] == expected
 
 
 def test_list_logins_returns_items_without_secrets():

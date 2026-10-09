@@ -41,6 +41,7 @@ BIN_DIR = E2E_DIR / "bin"
 EMAIL = "e2e@example.com"
 RBW_PROFILE = "qwe2e"
 CLEAR_SECONDS = 2  # totp.clipboard_clear_seconds and vault.copy_clear_seconds
+EQUIVALENT_DOMAINS = [["equiv-a.test", "equiv-b.test"]]  # matching.equivalent_domains
 TIMEOUT = 30.0  # seconds any single wait may take
 
 # The only variables taken from the developer's environment.

@@ -42,12 +42,13 @@ def select_candidate(ctx: Context, *, prompt: str = "Fill") -> Selection:
     if not found:
         raise QutewardenError(f"no Login item matches {origin}; "
                               "use `vault` to pick from every Item")
-    if len(found) == 1 and ctx.config.auto_fill:
-        return Selection(page_url, origin, found[0])
-    index = ctx.picker.choose(prompt, [item_line(item) for item in found])
+    if len(found) == 1 and ctx.config.auto_fill and found[0].equivalent_domain is None:
+        # Never Auto-fill through Equivalent domains (ADR-0006).
+        return Selection(page_url, origin, found[0].item)
+    index = ctx.picker.choose(prompt, [candidate_line(c) for c in found])
     if index is None:
         raise UserCancelled()
-    return Selection(page_url, origin, found[index])
+    return Selection(page_url, origin, found[index].item)
 
 
 def ensure_unlocked(ctx: Context) -> None:
@@ -56,7 +57,7 @@ def ensure_unlocked(ctx: Context) -> None:
         ctx.backend.unlock()
 
 
-def find_candidates(ctx: Context, page_url: str) -> list[LoginItem]:
+def find_candidates(ctx: Context, page_url: str) -> list[match.Candidate]:
     """The Candidates for the page; if there are none, sync once and look again.
 
     May return an empty list (callers decide whether that's an error).
@@ -68,21 +69,30 @@ def find_candidates(ctx: Context, page_url: str) -> list[LoginItem]:
     return found
 
 
-def _candidates(ctx: Context, page_url: str) -> list[LoginItem]:
+def _candidates(ctx: Context, page_url: str) -> list[match.Candidate]:
     return match.candidates(ctx.backend.list_logins(), page_url,
                             default_mode=ctx.config.matching_default_mode,
-                            extractor=_extractor(ctx))
+                            extractor=_extractor(ctx),
+                            equivalent_domains=_equivalent_domains(ctx))
 
 
 def is_candidate(ctx: Context, item: LoginItem, page_url: str) -> bool:
     """Whether ``item`` is a Candidate for the page (Security rule 5)."""
     return match.is_candidate(item, page_url, default_mode=ctx.config.matching_default_mode,
-                              extractor=_extractor(ctx))
+                              extractor=_extractor(ctx),
+                              equivalent_domains=_equivalent_domains(ctx))
 
 
 def item_line(item: LoginItem) -> str:
     """One picker line: the Item name and username."""
     return f"{item.name} — {item.username}" if item.username else item.name
+
+
+def candidate_line(candidate: match.Candidate) -> str:
+    """A Candidate's picker line, plus the domain it matched through Equivalent domains."""
+    line = item_line(candidate.item)
+    domain = candidate.equivalent_domain
+    return f"{line} ({domain})" if domain else line
 
 
 def fill_login(ctx: Context, selection: Selection) -> None:
@@ -133,6 +143,12 @@ def copy_secret(ctx: Context, item: LoginItem, what: str, value: str, *,
 def describe(item: LoginItem) -> str:
     """The Item for messages: name and username (Security rule 6 allows both)."""
     return f"{item.name} ({item.username})" if item.username else item.name
+
+
+def _equivalent_domains(ctx: Context) -> match.EquivalentDomains:
+    return match.load_equivalent_domains(
+        global_groups=ctx.config.matching_global_equivalent_domains,
+        user_groups=ctx.config.matching_equivalent_domains)
 
 
 def _extractor(ctx: Context):
