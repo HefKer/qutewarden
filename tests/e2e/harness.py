@@ -433,6 +433,15 @@ class Page:
 # --- displays -------------------------------------------------------------------------
 
 
+def _tail(path: Path, lines: int = 60) -> str:
+    """The last ``lines`` lines of a log file, for error messages."""
+    try:
+        text = path.read_text(errors="replace")
+    except OSError as e:
+        return f"(unreadable: {e})"
+    return "\n".join(text.splitlines()[-lines:])
+
+
 class Displays:
     """Headless sway (for wl-clipboard) and Xvfb (for xclip)."""
 
@@ -441,15 +450,26 @@ class Displays:
         config = dirs.root / "sway.cfg"
         config.write_text("")
         before = set(dirs.runtime.glob("wayland-*"))
-        self._sway = subprocess.Popen(
-            ["sway", "-c", str(config)],
-            env=isolated_environ(dirs, {"WLR_BACKENDS": "headless", "WLR_RENDERER": "pixman",
-                                        "WLR_LIBINPUT_NO_DEVICES": "1"}),
-            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-            start_new_session=True)
-        sock = wait_for(lambda: [p for p in dirs.runtime.glob("wayland-*")
-                                 if p not in before and p.suffix != ".lock" and p.is_socket()],
-                        "sway's Wayland socket")
+        log = dirs.root / "sway.log"
+        with log.open("wb") as stderr:
+            self._sway = subprocess.Popen(
+                ["sway", "-d", "-c", str(config)],
+                env=isolated_environ(dirs, {"WLR_BACKENDS": "headless", "WLR_RENDERER": "pixman",
+                                            "WLR_LIBINPUT_NO_DEVICES": "1"}),
+                stdin=subprocess.DEVNULL, stdout=stderr, stderr=stderr, start_new_session=True)
+
+        def socket() -> list[Path] | None:
+            if (code := self._sway.poll()) is not None:
+                raise HarnessError(f"sway exited with code {code}:\n{_tail(log)}")
+            return [p for p in dirs.runtime.glob("wayland-*")
+                    if p not in before and p.suffix != ".lock" and p.is_socket()]
+
+        try:
+            sock = wait_for(socket, "sway's Wayland socket")
+        except HarnessError as e:
+            if "sway exited" in str(e):
+                raise
+            raise HarnessError(f"{e}; sway's log:\n{_tail(log)}") from None
         self.wayland_display = sock[0].name
         read, write = os.pipe()
         self._xvfb = subprocess.Popen(
