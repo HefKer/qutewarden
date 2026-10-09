@@ -62,6 +62,32 @@ ln -sf "$(command -v qutewarden)" ~/.local/share/qutebrowser/userscripts/qutewar
 
 With `nix profile`, the link to `~/.nix-profile/bin/qutewarden` stays valid across upgrades. Alternatively, bind the absolute path, e.g. `spawn --userscript /run/current-system/sw/bin/qutewarden fill`.
 
+### home-manager
+
+The flake exports a home-manager module that installs qutewarden, links it into qutebrowser's userscripts directory, writes the config file and adds key bindings:
+
+```nix
+{
+  imports = [ qutewarden.homeManagerModules.default ];
+
+  programs.qutewarden = {
+    enable = true;
+    # Written to $XDG_CONFIG_HOME/qutewarden/config.toml (see Configuration).
+    settings = {
+      auto_fill = true;
+      matching.equivalent_domains = [ [ "example.com" "example.org" ] ];
+    };
+    # Added to programs.qutebrowser.keyBindings.normal as `spawn --userscript qutewarden …`.
+    keyBindings = {
+      ",p" = "fill";
+      ",P" = "fill --auto-fill";
+    };
+  };
+}
+```
+
+`package` defaults to this flake's package. The key bindings only take effect when qutebrowser's config is managed by `programs.qutebrowser`.
+
 ## Key bindings
 
 In qutebrowser's `config.py` (or with `:bind`, e.g. `:bind ,p spawn --userscript qutewarden fill`):
