@@ -294,14 +294,17 @@ class Rbw:
 
 # --- test pages ----------------------------------------------------------------------
 
-# Appended to every page: reports the page's fields every 100 ms. Runs in the
-# page's main world, so it also sees `window.submitted` of pages that count submits.
+# Appended to every page: reports the page's fields (inputs and selects) every
+# 100 ms. Runs in the page's main world, so it also sees `window.submitted` of
+# pages that count submits.
 _REPORT_JS = """<script>
 (() => {
   const load = Math.random().toString(36).slice(2);
   const report = () => {
     const fields = {};
-    for (const el of document.querySelectorAll("input")) fields[el.id || el.name] = el.value;
+    for (const el of document.querySelectorAll("input, select")) {
+      fields[el.id || el.name] = el.value;
+    }
     fetch("/__e2e/report", {method: "POST", body: JSON.stringify({
       load, href: location.href, origin: location.origin, fields,
       submitted: window.submitted === undefined ? null : window.submitted})});

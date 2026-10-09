@@ -210,7 +210,7 @@ function fillAuto(root, a, focused) {
   return fillLogin(root, a, focused);
 }
 
-// --- Fields by kind (Card items) ---------------------------------------------
+// --- Fields by kind (Card and Identity items) --------------------------------
 //
 // A kind is the autocomplete token that names a field ("cc-number"). A field
 // whose autocomplete names a kind is that kind; a field with no autocomplete
@@ -380,10 +380,61 @@ const CARD_WORDS = [
   [/card.?(type|brand)|cc.?type/i, "cc-type"],
 ];
 
-// Fill a Card item into doc (scoped by the focused field); return the fields
-// filled. Never submits: an unwanted submit can be a purchase (ADR-0005).
-function fillCard(doc, focused, card) {
-  return fillKinds(scopeFor(doc, focused, fillableControls), CARD_KINDS, CARD_WORDS, card);
+// --- Identity items --------------------------------------------------------------
+//
+// `v` is `a.identity`: one value per kind below (streetAddress is every
+// address line joined). Missing values are null. A <select> (country, say)
+// takes the option whose value or text is the value.
+
+const IDENTITY_KINDS = new Map([
+  ["honorific-prefix", { value: (el, v) => v.honorificPrefix }],
+  ["given-name", { value: (el, v) => v.givenName }],
+  ["additional-name", { value: (el, v) => v.additionalName }],
+  ["family-name", { value: (el, v) => v.familyName }],
+  ["organization", { value: (el, v) => v.organization }],
+  ["street-address", { value: (el, v) => v.streetAddress }],
+  ["address-line1", { value: (el, v) => v.addressLine1 }],
+  ["address-line2", { value: (el, v) => v.addressLine2 }],
+  ["address-line3", { value: (el, v) => v.addressLine3 }],
+  ["address-level1", { value: (el, v) => v.addressLevel1 }],
+  ["address-level2", { value: (el, v) => v.addressLevel2 }],
+  ["postal-code", { value: (el, v) => v.postalCode }],
+  ["country", { value: (el, v) => v.country }],
+  ["country-name", { value: (el, v) => v.country }],
+  ["email", { value: (el, v) => v.email }],
+  ["tel", { value: (el, v) => v.tel }],
+  ["username", { value: (el, v) => v.username }],
+]);
+
+// Without autocomplete. Order matters: "Email address" is an email field and
+// "Address line 2" isn't line 1; a bare "Name" is never guessed.
+const IDENTITY_WORDS = [
+  [/e-?mail/i, "email"],
+  [/phone|\btel\b|mobile/i, "tel"],
+  [/user.?name|login/i, "username"],
+  [/zip|postal|post.?code/i, "postal-code"],
+  [/country/i, "country"],
+  [/state|province|region|county/i, "address-level1"],
+  [/city|town|locality/i, "address-level2"],
+  [/address.?(line)?.?2|addr.?2|\bapt\b|suite|apartment/i, "address-line2"],
+  [/address.?(line)?.?3|addr.?3/i, "address-line3"],
+  [/address|street|addr/i, "address-line1"],
+  [/middle/i, "additional-name"],
+  [/first|given|fname|forename/i, "given-name"],
+  [/last.?name|surname|family|lname/i, "family-name"],
+  [/company|organi[sz]ation|\borg\b|business/i, "organization"],
+  [/\btitle\b|salutation|honorific/i, "honorific-prefix"],
+];
+
+// Fill an Item that isn't a Login (a.mode "card" or "identity") into doc,
+// scoped by the focused field; return the fields filled. Never submits.
+function fillItem(doc, focused, a) {
+  const root = scopeFor(doc, focused, fillableControls);
+  switch (a.mode) {
+    case "card": return fillKinds(root, CARD_KINDS, CARD_WORDS, a.card);
+    case "identity": return fillKinds(root, IDENTITY_KINDS, IDENTITY_WORDS, a.identity);
+  }
+  return [];
 }
 
 // Submit controls for pages without a <form>, best first. Each selector is
@@ -487,7 +538,7 @@ function focusedDocument(doc) {
 // focused document if it has a fillable focused input, then the rest in
 // tree order. Only documents whose own origin is the expected one.
 // `focusOf(doc)` is the mode's idea of a focused field (focusedControl for
-// Card items, which also counts a <select>).
+// Card and Identity items, which also counts a <select>).
 function fillTargets(top, origin, focusOf = focusedInput) {
   const focusedDoc = focusedDocument(top);
   const focused = focusOf(focusedDoc);
@@ -529,10 +580,12 @@ function fillDocument(root, a, focused) {
 
 // Fills the first target document in which the mode finds fields.
 function qutewardenFill(a) {
-  if (a.mode === "card") {
-    // Never submits, whatever `a.submit` says (ADR-0005).
+  if (a.mode === "card" || a.mode === "identity") {
+    // Never submits, whatever `a.submit` says: an unwanted card submit can be
+    // a purchase, and an identity fill is usually one step of a longer form
+    // (ADR-0005).
     for (const { doc, focused } of fillTargets(document, a.origin, focusedControl)) {
-      if (fillCard(doc, focused, a.card).length) return;
+      if (fillItem(doc, focused, a).length) return;
     }
     return;
   }

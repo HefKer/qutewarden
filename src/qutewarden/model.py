@@ -51,6 +51,15 @@ class CardItem:
 
 
 @dataclass(frozen=True)
+class IdentityItem:
+    """An Identity item's metadata: its name only, since every value is a secret."""
+
+    id: str
+    name: str
+    reprompt: bool = False
+
+
+@dataclass(frozen=True)
 class ItemSecrets:
     """The values of one Item, as ``Backend.get_secrets`` returns them.
 
@@ -79,6 +88,34 @@ class CardSecrets(ItemSecrets):
     exp_month: str | None = None
     exp_year: str | None = None
     code: str | None = None  # the security code
+
+
+@dataclass(frozen=True, repr=False)
+class IdentitySecrets(ItemSecrets):
+    """An Identity item's values, named as rbw names them.
+
+    Every value counts as a secret in messages (Security rule 6). ``company``
+    is Bitwarden's; rbw 1.15 doesn't pass it on, so the rbw Backend leaves it None.
+    """
+
+    title: str | None = None
+    first_name: str | None = None
+    middle_name: str | None = None
+    last_name: str | None = None
+    company: str | None = None
+    address1: str | None = None
+    address2: str | None = None
+    address3: str | None = None
+    city: str | None = None
+    state: str | None = None
+    postal_code: str | None = None
+    country: str | None = None
+    phone: str | None = None
+    email: str | None = None
+    ssn: str | None = None
+    license_number: str | None = None
+    passport_number: str | None = None
+    username: str | None = None
 
 
 @dataclass(frozen=True)

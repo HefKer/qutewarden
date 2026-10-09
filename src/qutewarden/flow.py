@@ -1,4 +1,5 @@
-"""Steps shared by the subcommands that fill: `fill`, `totp`, `generate`, `vault`, `card`.
+"""Steps shared by the subcommands that fill: `fill`, `totp`, `generate`, `vault`, `card`,
+`identity`.
 
 ``select_candidate`` is steps 1–3 of `fill` in the spec: read the page URL,
 unlock, work out the Candidates and pick one. ``fill_login`` sends the chosen

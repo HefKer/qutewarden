@@ -13,7 +13,8 @@ from qutewarden.match import make_suffix_extractor
 from qutewarden.model import MatchMode
 from qutewarden.qute import Qute
 
-SUBCOMMANDS = ["fill", "totp", "generate", "vault", "card", "unlock", "lock", "sync", "status"]
+SUBCOMMANDS = ["fill", "totp", "generate", "vault", "card", "identity", "unlock", "lock", "sync",
+               "status"]
 
 
 @pytest.fixture

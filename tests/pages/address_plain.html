@@ -1,0 +1,27 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Shipping address (no autocomplete)</title></head>
+<body>
+  <!-- No autocomplete attributes: fields are found by name, id, label and placeholder. -->
+  <div id="shipping">
+    <label for="fname">First name</label> <input type="text" id="fname" name="fname">
+    <label for="lname">Last name</label> <input type="text" id="lname" name="lname">
+    <label for="org">Company</label> <input type="text" id="org" name="org">
+    <input type="text" id="street" name="street" placeholder="Street address">
+    <input type="text" id="apt" name="apt" placeholder="Apt, suite, etc. (optional)">
+    <label for="town">City</label> <input type="text" id="town" name="town">
+    <label for="region">State / Province</label> <input type="text" id="region" name="region">
+    <label for="zip">ZIP code</label> <input type="text" id="zip" name="zip">
+    <label for="land">Country</label>
+    <select id="land" name="land">
+      <option value="">--</option>
+      <option value="de">Germany</option>
+      <option value="us">United States</option>
+    </select>
+    <label for="mail">Email address</label> <input type="email" id="mail" name="mail">
+    <label for="phone">Phone number</label> <input type="tel" id="phone" name="phone">
+    <input type="text" id="gift" name="gift" placeholder="Gift message">
+    <button type="button" id="next">Next</button>
+  </div>
+</body>
+</html>

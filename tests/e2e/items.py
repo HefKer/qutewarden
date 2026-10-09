@@ -109,6 +109,15 @@ class Card:
 
 
 @dataclass
+class Identity:
+    """An Identity item; ``values`` maps Bitwarden's identity keys to values."""
+
+    name: str
+    values: dict[str, str]
+    id: str = ""
+
+
+@dataclass
 class SeededVault:
     """The seeded Items, by role."""
 
@@ -126,11 +135,15 @@ class SeededVault:
     two_2: Login
     card: Card  # Visa, filled by `card`
     card_reprompt: Card  # a Re-prompt Card item: listed by name only
+    identity: Identity  # filled by `identity` into address.html
     equivalent: Login  # equiv-a.test, a Candidate on equiv-b.test through the user's group
     others: list[str] = field(default_factory=list)  # names of the Card and Identity items
 
     def logins(self) -> list[Login]:
         return [v for v in vars(self).values() if isinstance(v, Login)]
+
+    def identities(self) -> list[Identity]:
+        return [v for v in vars(self).values() if isinstance(v, Identity)]
 
     def cards(self) -> list[Card]:
         return [v for v in vars(self).values() if isinstance(v, Card)]
@@ -166,12 +179,21 @@ def build(markers: Markers) -> SeededVault:
                   s("card-code")),
         card_reprompt=Card("Card R", "Al Ice", "Mastercard", s("card-number-5454"), "12", "2031",
                            s("card-code-r"), reprompt=True),
+        identity=Identity("Ident I", {
+            "title": s("ident-title"), "firstName": s("ident-first"),
+            "middleName": s("ident-middle"), "lastName": s("ident-last"),
+            "company": s("ident-company"), "address1": s("ident-address1"),
+            "address2": s("ident-address2"), "city": s("ident-city"), "state": s("ident-state"),
+            "postalCode": s("ident-postal"), "country": "US",  # a <select> option
+            "email": s("ident-email"), "phone": s("ident-phone"),
+            "username": s("ident-username"), "ssn": s("identity-ssn"),
+            "passportNumber": s("identity-passport")}),
         equivalent=Login("Equiv E", "ella", s("pw-equivalent"), (Uri("https://equiv-a.test"),)),
     )
 
 
 def seed(client: VaultClient, vault: SeededVault, markers: Markers) -> None:
-    """Create every Item of ``vault`` (and a Card and an Identity) on the server."""
+    """Create every Item of ``vault`` on the server."""
     for login in vault.logins():
         login.id = client.create_item(_login_body(client, login))
     e = client.encrypt
@@ -184,12 +206,11 @@ def seed(client: VaultClient, vault: SeededVault, markers: Markers) -> None:
                      "number": e(card.number), "expMonth": e(card.exp_month),
                      "expYear": e(card.exp_year), "code": e(card.code)}})
         vault.others.append(card.name)
-    identity = {"type": 4, "name": e("Ident I"), "reprompt": 0,
-                "identity": {"firstName": e("Al"), "lastName": e("Ice"),
-                             "email": e("al@example.com"), "ssn": e(s("identity-ssn")),
-                             "passportNumber": e(s("identity-passport"))}}
-    client.create_item(identity)
-    vault.others.append("Ident I")
+    for identity in vault.identities():
+        identity.id = client.create_item({
+            "type": 4, "name": e(identity.name), "reprompt": 0,
+            "identity": {key: e(value) for key, value in identity.values.items()}})
+        vault.others.append(identity.name)
 
 
 def _login_body(client: VaultClient, login: Login) -> dict[str, Any]:
