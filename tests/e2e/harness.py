@@ -613,8 +613,11 @@ class Qutebrowser:
         self._entries: list[LogEntry] = []
         self._read_pos = 0
         self._partial = b""
+        # The offscreen platform uses GLX when DISPLAY is set (it is, for the
+        # xclip userscripts) and aborts if Xvfb has none, as on CI runners.
+        qt_env = {"QT_QPA_PLATFORM": "offscreen", "QT_QPA_OFFSCREEN_NO_GLX": "1"}
         with open(self.log_path, "wb") as log:
-            self._proc = subprocess.Popen(argv, env={**env, "QT_QPA_PLATFORM": "offscreen"},
+            self._proc = subprocess.Popen(argv, env={**env, **qt_env},
                                           cwd=self.basedir, stdin=subprocess.DEVNULL,
                                           stdout=log, stderr=subprocess.STDOUT,
                                           start_new_session=True)
