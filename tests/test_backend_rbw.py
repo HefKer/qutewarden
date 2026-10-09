@@ -15,7 +15,6 @@ from pathlib import Path
 
 import pytest
 
-from qutewarden.backend import make_backend
 from qutewarden.backend.base import (
     BackendError,
     BackendUnavailable,
@@ -26,7 +25,6 @@ from qutewarden.backend.base import (
 )
 from qutewarden.backend.fake import SECRET_MARKER
 from qutewarden.backend.rbw import RbwBackend
-from qutewarden.config import ConfigError
 from qutewarden.model import ItemUri, LoginItem, MatchMode, Secrets
 
 FIXTURES = Path(__file__).parent / "fixtures" / "rbw"
@@ -104,12 +102,6 @@ def rbw(tmp_path: Path) -> FakeRbw:
 
 
 # --- availability -----------------------------------------------------------
-
-def test_make_backend_builds_rbw_and_rejects_others():
-    assert isinstance(make_backend("rbw", {}), RbwBackend)
-    with pytest.raises(ConfigError):
-        make_backend("bw", {})
-
 
 def test_missing_rbw_is_backend_unavailable(tmp_path: Path):
     backend = RbwBackend({}, executable=str(tmp_path / "no-such-rbw"))

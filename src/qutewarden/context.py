@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from qutewarden.backend import make_backend
+from qutewarden.backend.rbw import RbwBackend
 from qutewarden.clipboard import Clipboard, detect_clipboard
 from qutewarden.config import Config
 from qutewarden.generator import generate_password_from_config
@@ -47,7 +47,7 @@ class Context:
             config=config,
             environ=environ,
             qute=Qute.from_environ(environ),
-            backend=make_backend(config.backend, environ),
+            backend=RbwBackend(environ),
             picker=DmenuPicker(config.picker or detect_picker_argv(environ)),
             clipboard=detect_clipboard(environ),
             runtime_dir=_runtime_dir(environ),
