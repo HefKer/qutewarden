@@ -450,25 +450,28 @@ class Displays:
         config = dirs.root / "sway.cfg"
         config.write_text("")
         before = set(dirs.runtime.glob("wayland-*"))
+        # nixpkgs' sway wrapper starts its own bus with dbus-run-session when
+        # there is none, which needs /etc/dbus-1/session.conf: NixOS has it,
+        # CI runners don't. Headless sway needs no bus, so point it at none.
+        env = {"WLR_BACKENDS": "headless", "WLR_RENDERER": "pixman",
+               "WLR_LIBINPUT_NO_DEVICES": "1",
+               "DBUS_SESSION_BUS_ADDRESS": f"unix:path={dirs.runtime / 'no-bus'}"}
         log = dirs.root / "sway.log"
-        with log.open("wb") as stderr:
+        with log.open("wb") as output:
             self._sway = subprocess.Popen(
-                ["sway", "-d", "-c", str(config)],
-                env=isolated_environ(dirs, {"WLR_BACKENDS": "headless", "WLR_RENDERER": "pixman",
-                                            "WLR_LIBINPUT_NO_DEVICES": "1"}),
-                stdin=subprocess.DEVNULL, stdout=stderr, stderr=stderr, start_new_session=True)
+                ["sway", "-c", str(config)], env=isolated_environ(dirs, env),
+                stdin=subprocess.DEVNULL, stdout=output, stderr=output, start_new_session=True)
 
         def socket() -> list[Path] | None:
-            if (code := self._sway.poll()) is not None:
-                raise HarnessError(f"sway exited with code {code}:\n{_tail(log)}")
+            if self._sway.poll() is not None:
+                raise HarnessError(f"sway exited with code {self._sway.returncode}")
             return [p for p in dirs.runtime.glob("wayland-*")
                     if p not in before and p.suffix != ".lock" and p.is_socket()]
 
         try:
             sock = wait_for(socket, "sway's Wayland socket")
         except HarnessError as e:
-            if "sway exited" in str(e):
-                raise
+            stop_process(self._sway)
             raise HarnessError(f"{e}; sway's log:\n{_tail(log)}") from None
         self.wayland_display = sock[0].name
         read, write = os.pipe()
