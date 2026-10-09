@@ -25,11 +25,14 @@ from qutewarden.backend.base import (
 )
 from qutewarden.backend.fake import SECRET_MARKER
 from qutewarden.backend.rbw import RbwBackend
-from qutewarden.model import ItemUri, LoginItem, MatchMode, Secrets
+from qutewarden.model import CardItem, CardSecrets, ItemUri, LoginItem, LoginSecrets, MatchMode
 
 FIXTURES = Path(__file__).parent / "fixtures" / "rbw"
 GITHUB_ID = "6f1c2d4e-8a3b-4c5d-9e7f-0a1b2c3d4e5f"
 BANK_ID = "a2c4e6f8-1b3d-4f5a-9c7e-0d2f4a6b8c1e"
+CARD_ID = "e5f7a9b1-3c5d-4e7f-8a9b-1c3d5e7f9a0b"
+OLD_CARD_ID = "f7b9c1d3-5e7f-4a9b-8c1d-3e5f7a9b1c2d"  # a Re-prompt Card item
+NOTE_ID = "0b9e7a1c-2d3f-4e5a-8b6c-7d8e9f0a1b2c"
 EMAIL = "alice@example.com"
 CONFIG_SHOW = json.dumps({"email": EMAIL, "sso_id": None, "base_url": None, "identity_url": None,
                           "ui_url": None, "notifications_url": None, "lock_timeout": 3600,
@@ -281,41 +284,118 @@ def test_db_path_follows_base_url_and_rbw_profile(rbw):
     assert len(rbw.backend().list_logins()) == 4
 
 
+# --- list_cards -------------------------------------------------------------
+
+def test_list_cards_takes_card_items_from_the_db_with_brand_and_last_4_digits(rbw):
+    rbw.respond(["list", "--raw"], fixture("list_raw.json"))
+    rbw.respond(["get", "--raw", "--", CARD_ID], fixture("get_raw_card.json"))
+    rbw.write_db()
+    assert rbw.backend().list_cards() == [
+        CardItem(id=CARD_ID, name="Card", brand="Visa", last4="1234"),
+        CardItem(id=OLD_CARD_ID, name="Old card", reprompt=True),
+    ]
+
+
+def test_list_cards_never_decrypts_a_reprompt_card(rbw):
+    rbw.respond(["list", "--raw"], fixture("list_raw.json"))
+    rbw.respond(["get", "--raw", "--", CARD_ID], fixture("get_raw_card.json"))
+    rbw.write_db()
+    rbw.backend().list_cards()
+    assert [argv for argv in rbw.argvs if argv[0] == "get"] == [["get", "--raw", "--", CARD_ID]]
+
+
+@pytest.mark.parametrize("number, last4", [
+    ("4111-1111-1111-0042", "0042"), ("123", None), (None, None), ("", None)])
+def test_list_cards_shows_only_the_last_4_digits_of_the_number(rbw, number, last4):
+    item = json.loads(fixture("get_raw_card.json"))
+    item["data"]["number"] = number
+    item["data"]["brand"] = None
+    rbw.respond(["list", "--raw"], fixture("list_raw.json"))
+    rbw.respond(["get", "--raw", "--", CARD_ID], json.dumps(item))
+    rbw.write_db()
+    [card, _] = rbw.backend().list_cards()
+    assert (card.brand, card.last4) == (None, last4)
+
+
+def test_list_cards_without_db_asks_for_sync(rbw):
+    rbw.respond(["list", "--raw"], fixture("list_raw.json"))
+    with pytest.raises(BackendError) as excinfo:
+        rbw.backend().list_cards()
+    assert excinfo.value.hint == "run `rbw sync`"
+
+
 # --- get_secrets ------------------------------------------------------------
 
 def test_get_secrets_parses_rbw_get_raw_with_one_call(rbw):
     rbw.respond(["get", "--raw", "--", GITHUB_ID], fixture("get_raw_login.json"))
+    rbw.write_db()
     secrets = rbw.backend().get_secrets(GITHUB_ID)
+    assert isinstance(secrets, LoginSecrets)
     assert secrets.password == "QWSECRET-rbw-password"
     assert secrets.totp is not None and secrets.totp.isdigit() and len(secrets.totp) == 6
-    assert rbw.argvs == [["get", "--raw", "--", GITHUB_ID]]
+    assert [argv for argv in rbw.argvs if argv[0] == "get"] == [["get", "--raw", "--", GITHUB_ID]]
+
+
+def test_get_secrets_of_a_card_item_returns_its_card_values(rbw):
+    rbw.respond(["get", "--raw", "--", CARD_ID], fixture("get_raw_card.json"))
+    rbw.write_db()
+    assert rbw.backend().get_secrets(CARD_ID) == CardSecrets(
+        cardholder_name="Alice Example", number="QWSECRET-rbw-4111 1111 1111 1234",
+        brand="Visa", exp_month="3", exp_year="2030", code="QWSECRET-rbw-code")
+
+
+def test_get_secrets_takes_the_item_type_from_the_db_not_from_the_keys(rbw):
+    # A Card whose values happen to look like nothing in particular.
+    rbw.respond(["get", "--raw", "--", CARD_ID], json.dumps(
+        {"id": CARD_ID, "name": "Card", "data": {"username": "x", "password": "y"}}))
+    rbw.write_db()
+    assert rbw.backend().get_secrets(CARD_ID) == CardSecrets()
+
+
+def test_get_secrets_of_an_item_missing_from_the_db_asks_for_sync(rbw):
+    rbw.write_db()
+    with pytest.raises(ItemNotFound) as excinfo:
+        rbw.backend().get_secrets("nope")
+    assert excinfo.value.hint == "run `rbw sync`"
+    assert not any(argv[0] == "get" for argv in rbw.argvs)
+
+
+def test_get_secrets_of_a_secure_note_is_refused_without_decrypting(rbw):
+    rbw.write_db()
+    with pytest.raises(BackendError, match="can't be filled"):
+        rbw.backend().get_secrets(NOTE_ID)
+    assert not any(argv[0] == "get" for argv in rbw.argvs)
 
 
 def test_get_secrets_computes_the_totp_code_from_the_seed(rbw):
+    rbw.write_db()
     item = json.loads(fixture("get_raw_login.json"))
     item["data"]["totp"] = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"  # RFC 6238 seed
     rbw.respond(["get", "--raw", "--", GITHUB_ID], json.dumps(item))
     secrets = rbw.backend(clock=lambda: 59.0).get_secrets(GITHUB_ID)
-    assert secrets == Secrets(password="QWSECRET-rbw-password", totp="287082")
+    assert secrets == LoginSecrets(password="QWSECRET-rbw-password", totp="287082")
 
 
 def test_get_secrets_without_totp_or_password(rbw):
+    rbw.write_db()
     rbw.respond(["get", "--raw", "--", BANK_ID], fixture("get_raw_reprompt.json"))
-    assert rbw.backend().get_secrets(BANK_ID) == Secrets(password="QWSECRET-rbw-bank-password")
+    assert rbw.backend().get_secrets(BANK_ID) == LoginSecrets(password="QWSECRET-rbw-bank-password")
     item = json.loads(fixture("get_raw_reprompt.json"))
     item["data"]["password"] = None
     rbw.respond(["get", "--raw", "--", BANK_ID], json.dumps(item))
-    assert rbw.backend().get_secrets(BANK_ID) == Secrets()
+    assert rbw.backend().get_secrets(BANK_ID) == LoginSecrets()
 
 
-def test_get_secrets_unknown_item(rbw):
-    rbw.respond(["get", "--raw", "--", "nope"],
-                stderr="rbw get: couldn't find entry for 'nope': no entry found\n", rc=1)
+def test_get_secrets_of_an_item_rbw_get_cannot_find(rbw):
+    rbw.write_db()
+    rbw.respond(["get", "--raw", "--", BANK_ID],
+                stderr="rbw get: couldn't find entry for 'x': no entry found\n", rc=1)
     with pytest.raises(ItemNotFound):
-        rbw.backend().get_secrets("nope")
+        rbw.backend().get_secrets(BANK_ID)
 
 
 def test_get_secrets_errors_never_echo_rbw_output(rbw):
+    rbw.write_db()
     rbw.respond(["get", "--raw", "--", GITHUB_ID], stdout=f"{SECRET_MARKER}-partial",
                 stderr=f"rbw get: {SECRET_MARKER}-weird\n", rc=1)
     with pytest.raises(BackendError) as excinfo:
@@ -324,6 +404,7 @@ def test_get_secrets_errors_never_echo_rbw_output(rbw):
 
 
 def test_get_secrets_with_terminal_only_pinentry_asks_for_a_graphical_one(rbw):
+    rbw.write_db()
     stderr = NO_TTY_PINENTRY_STDERR.replace("rbw unlock:", f"rbw get: {SECRET_MARKER}:")
     rbw.respond(["get", "--raw", "--", BANK_ID], stdout=f"{SECRET_MARKER}-partial",
                 stderr=stderr, rc=1)
@@ -335,6 +416,7 @@ def test_get_secrets_with_terminal_only_pinentry_asks_for_a_graphical_one(rbw):
 
 
 def test_get_secrets_with_rejected_refresh_token_asks_to_log_in_again(rbw):
+    rbw.write_db()
     stderr = EXPIRED_LOGIN_STDERR.replace("rbw sync:", f"rbw get: {SECRET_MARKER}:")
     rbw.respond(["get", "--raw", "--", BANK_ID], stdout=f"{SECRET_MARKER}-partial",
                 stderr=stderr, rc=1)
@@ -345,6 +427,7 @@ def test_get_secrets_with_rejected_refresh_token_asks_to_log_in_again(rbw):
 
 
 def test_get_secrets_with_cancelled_pinentry_is_still_rbw_get_failed(rbw):
+    rbw.write_db()
     rbw.respond(["get", "--raw", "--", BANK_ID], stderr="rbw get: pinentry error: "
                                                         "Operation cancelled <Pinentry>\n", rc=1)
     with pytest.raises(BackendError) as excinfo:
@@ -354,6 +437,7 @@ def test_get_secrets_with_cancelled_pinentry_is_still_rbw_get_failed(rbw):
 
 
 def test_get_secrets_invalid_totp_seed_is_secret_free_error(rbw):
+    rbw.write_db()
     item = json.loads(fixture("get_raw_login.json"))
     item["data"]["totp"] = f"{SECRET_MARKER}!!"
     rbw.respond(["get", "--raw", "--", GITHUB_ID], json.dumps(item))
@@ -436,7 +520,8 @@ def test_no_secret_in_child_arguments_or_environment(rbw):
 
     backend.status()
     backend.list_logins()
-    assert SECRET_MARKER in backend.get_secrets(GITHUB_ID).password
+    secrets = backend.get_secrets(GITHUB_ID)
+    assert isinstance(secrets, LoginSecrets) and SECRET_MARKER in (secrets.password or "")
     backend.create_login(name="Site", username="alice", uri="https://site.test",
                          password=f"{SECRET_MARKER}-created")
     backend.update_password(GITHUB_ID, f"{SECRET_MARKER}-updated")

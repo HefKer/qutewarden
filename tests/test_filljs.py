@@ -5,11 +5,13 @@ qutebrowser's ``jseval --world``: it shares the DOM with the page but not
 the page's JavaScript globals.
 """
 
+import dataclasses
 from pathlib import Path
 
 import pytest
 
-from qutewarden.filljs import render_fill_js, render_probe_js
+from qutewarden.filljs import render_card_fill_js, render_fill_js, render_probe_js
+from qutewarden.model import CardSecrets
 
 pytestmark = pytest.mark.browser
 sync_api = pytest.importorskip("playwright.sync_api")
@@ -500,3 +502,112 @@ def test_origin_mismatch_fills_nothing(page, served_at):
     ))
     assert values(page, "username", "password") == {"username": "", "password": ""}
     assert page.evaluate("window.events") == []
+
+
+# --- Card items (#35) ---------------------------------------------------------
+
+CARD = CardSecrets(cardholder_name="Alice M Example", number="4242424242424242", brand="Visa",
+                   exp_month="3", exp_year="2030", code="QWSECRET-123")
+SHIPPING_IDS = ("first", "last", "email", "phone", "promo")
+
+
+def fill_card(page, card: CardSecrets = CARD, *, origin: str = ORIGIN) -> None:
+    run_isolated(page, render_card_fill_js(expected_origin=origin, card=card))
+
+
+def test_card_fields_are_found_by_autocomplete_with_a_single_expiry_field(page):
+    load(page, "checkout.html")
+    fill_card(page)
+    assert values(page, "cc-name", "cc-number", "cc-exp", "cc-csc") == {
+        "cc-name": "Alice M Example", "cc-number": "4242424242424242", "cc-exp": "03/30",
+        "cc-csc": "QWSECRET-123"}
+
+
+def test_a_card_fill_leaves_other_fields_alone_and_never_submits(page):
+    load(page, "checkout.html")
+    fill_card(page)
+    assert values(page, *SHIPPING_IDS) == dict.fromkeys(SHIPPING_IDS, "")
+    page.wait_for_timeout(100)
+    assert page.evaluate("window.submitted") == 0
+
+
+@pytest.mark.parametrize(("attribute", "value", "expiry"), [
+    ("maxlength", "7", "03/2030"),
+    ("placeholder", "MM/YYYY", "03/2030"),
+    ("placeholder", "e.g. 12/2031", "03/2030"),
+    ("pattern", r"\d{2}/\d{4}", "03/2030"),
+    ("pattern", r"\d{2}/\d{2}", "03/30"),
+])
+def test_a_single_expiry_field_gets_a_4_digit_year_only_when_it_asks_for_one(
+        page, attribute, value, expiry):
+    load(page, "checkout.html")
+    page.evaluate("""([attribute, value]) => {
+        const el = document.getElementById("cc-exp");
+        el.removeAttribute("maxlength");
+        el.removeAttribute("placeholder");
+        el.setAttribute(attribute, value);
+    }""", [attribute, value])
+    fill_card(page)
+    assert values(page, "cc-exp") == {"cc-exp": expiry}
+
+
+def test_split_card_fields_are_filled_separately(page):
+    load(page, "checkout_split.html")
+    fill_card(page)
+    ids = ("cc-given-name", "cc-family-name", "cc-number", "cc-exp-month", "cc-exp-year",
+           "cc-exp-year-4", "cc-csc", "cc-type")
+    assert values(page, *ids) == {
+        "cc-given-name": "Alice M", "cc-family-name": "Example", "cc-number": "4242424242424242",
+        "cc-exp-month": "03", "cc-exp-year": "30", "cc-exp-year-4": "2030",
+        "cc-csc": "QWSECRET-123", "cc-type": "Visa"}
+
+
+def test_selects_take_the_option_whose_value_or_text_matches(page):
+    load(page, "checkout_selects.html")
+    fill_card(page)
+    assert values(page, "cc-name", "cc-type", "cc-number", "cc-exp-month", "cc-exp-year") == {
+        "cc-name": "Alice M Example", "cc-type": "VI", "cc-number": "4242424242424242",
+        "cc-exp-month": "3", "cc-exp-year": "30"}
+    assert ["cc-exp-month", "change"] in page.evaluate("window.events")
+
+
+def test_a_select_without_a_matching_option_is_left_alone(page):
+    load(page, "checkout_selects.html")
+    fill_card(page, dataclasses.replace(CARD, brand="Discover", exp_year="2031"))
+    assert values(page, "cc-type", "cc-exp-year", "cc-exp-month") == {
+        "cc-type": "", "cc-exp-year": "", "cc-exp-month": "3"}
+
+
+def test_card_fields_without_autocomplete_are_found_by_name_id_label_and_placeholder(page):
+    load(page, "checkout_plain.html")
+    fill_card(page)
+    assert values(page, "holder", "cardnumber", "expiry", "cvc") == {
+        "holder": "Alice M Example", "cardnumber": "4242424242424242", "expiry": "03/2030",
+        "cvc": "QWSECRET-123"}
+    assert values(page, "fname", "phone", "promo") == {"fname": "", "phone": "", "promo": ""}
+
+
+def test_fields_the_card_has_no_value_for_are_left_alone(page):
+    load(page, "checkout.html")
+    page.fill("#cc-exp", "12/29")
+    page.fill("#cc-csc", "999")
+    fill_card(page, CardSecrets(number="4242424242424242", exp_month="13", exp_year="2030"))
+    assert values(page, "cc-name", "cc-number", "cc-exp", "cc-csc") == {
+        "cc-name": "", "cc-number": "4242424242424242", "cc-exp": "12/29", "cc-csc": "999"}
+
+
+def test_the_focused_fields_form_is_the_card_fill_scope(page):
+    load(page, "checkout.html")
+    page.evaluate("""() => document.body.insertAdjacentHTML("afterbegin",
+        '<form id="other"><input id="other-number" autocomplete="cc-number"></form>')""")
+    page.focus("#cc-csc")
+    fill_card(page)
+    assert values(page, "other-number", "cc-number") == {
+        "other-number": "", "cc-number": "4242424242424242"}
+
+
+def test_a_card_fill_on_another_origin_fills_nothing(page):
+    load(page, "checkout.html", origin="https://evil.example.test")
+    fill_card(page)
+    assert values(page, "cc-name", "cc-number", "cc-csc") == {
+        "cc-name": "", "cc-number": "", "cc-csc": ""}

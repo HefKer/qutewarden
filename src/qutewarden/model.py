@@ -35,14 +35,50 @@ class LoginItem:
 
 
 @dataclass(frozen=True)
-class Secrets:
+class CardItem:
+    """A Card item's metadata. Never holds secrets.
+
+    ``brand`` and ``last4`` (the number's last 4 digits) are the only parts of
+    the card that may appear in a picker line or message (Security rule 6).
+    Both are None for a Re-prompt item, whose number isn't read for listing.
+    """
+
+    id: str
+    name: str
+    brand: str | None = None
+    last4: str | None = None
+    reprompt: bool = False
+
+
+@dataclass(frozen=True)
+class ItemSecrets:
+    """The values of one Item, as ``Backend.get_secrets`` returns them.
+
+    One subclass per item type; they never show their values in ``repr``.
+    """
+
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}(<redacted>)"
+
+    __str__ = __repr__
+
+
+@dataclass(frozen=True, repr=False)
+class LoginSecrets(ItemSecrets):
     password: str | None = None
     totp: str | None = None  # the current TOTP *code*, not the seed
 
-    def __repr__(self) -> str:
-        return "Secrets(<redacted>)"
 
-    __str__ = __repr__
+@dataclass(frozen=True, repr=False)
+class CardSecrets(ItemSecrets):
+    """A Card item's values, as the Vault stores them (expiry not normalised)."""
+
+    cardholder_name: str | None = None
+    number: str | None = None
+    brand: str | None = None
+    exp_month: str | None = None
+    exp_year: str | None = None
+    code: str | None = None  # the security code
 
 
 @dataclass(frozen=True)

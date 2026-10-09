@@ -12,7 +12,16 @@ from qutewarden.backend.base import (
     NotLoggedIn,
     SaveFailed,
 )
-from qutewarden.model import ItemUri, LoginItem, MatchMode, Secrets, Status
+from qutewarden.model import (
+    CardItem,
+    CardSecrets,
+    ItemSecrets,
+    ItemUri,
+    LoginItem,
+    LoginSecrets,
+    MatchMode,
+    Status,
+)
 
 SECRET_MARKER = "QWSECRET"
 FAKE_LAST_SYNC = datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC)
@@ -42,13 +51,43 @@ FAKE_ITEMS: tuple[LoginItem, ...] = (
 )
 
 
+FAKE_CARDS: tuple[CardItem, ...] = (
+    CardItem(id="visa", name="Visa", brand="Visa", last4="4242"),
+    CardItem(id="work-card", name="Work card", brand="Mastercard", last4="5454"),
+    CardItem(id="locked-card", name="Locked card", reprompt=True),
+    CardItem(id="no-brand", name="No brand", last4="0005"),
+    CardItem(id="bare-card", name="Bare card"),
+)
+
+_CARD_VALUES: dict[str, dict[str, str]] = {
+    "visa": {"cardholder_name": "Alice Example", "number": "4242424242424242",
+             "brand": "Visa", "exp_month": "3", "exp_year": "2030"},
+    "work-card": {"cardholder_name": "Alice Example", "number": "5454545454545454",
+                  "brand": "Mastercard", "exp_month": "11", "exp_year": "2031"},
+    "locked-card": {"cardholder_name": "Alice Example", "number": "4000056655665556",
+                    "brand": "Visa", "exp_month": "1", "exp_year": "2029"},
+    "no-brand": {"number": "378282246310005"},
+    "bare-card": {},
+}
+
+
+def fake_card(item_id: str) -> CardSecrets:
+    """The Card item's values; its number and security code contain SECRET_MARKER."""
+    values = dict(_CARD_VALUES[item_id])
+    if "number" in values:
+        values["number"] = f"{SECRET_MARKER}-{values['number']}"
+        values["code"] = f"{SECRET_MARKER}-code-{item_id}"
+    return CardSecrets(**values)
+
+
 class FakeBackend(Backend):
     name = "fake"
 
     def __init__(self, items: Iterable[LoginItem] = FAKE_ITEMS, *, unlocked: bool = True,
                  logged_in: bool = True, items_after_sync: Iterable[LoginItem] | None = None,
-                 fail_save: bool = False) -> None:
+                 fail_save: bool = False, cards: Iterable[CardItem] = FAKE_CARDS) -> None:
         self.items = list(items)
+        self.cards = list(cards)
         self.unlocked = unlocked
         self.logged_in = logged_in
         self.items_after_sync = None if items_after_sync is None else list(items_after_sync)
@@ -85,10 +124,18 @@ class FakeBackend(Backend):
         self._require_unlocked()
         return list(self.items)
 
-    def get_secrets(self, item_id: str) -> Secrets:
+    def list_cards(self) -> list[CardItem]:
+        self.calls.append("list_cards")
+        self._require_unlocked()
+        return list(self.cards)
+
+    def get_secrets(self, item_id: str) -> ItemSecrets:
         self.calls.append("get_secrets")
+        self._require_unlocked()
+        if any(card.id == item_id for card in self.cards):
+            return fake_card(item_id)
         item = self._item(item_id)
-        return Secrets(password=fake_password(item.id),
+        return LoginSecrets(password=fake_password(item.id),
                        totp=fake_totp(item.id) if item.has_totp else None)
 
     def create_login(self, *, name: str, username: str | None, uri: str,

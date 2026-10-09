@@ -1,6 +1,6 @@
 # qutewarden
 
-Bitwarden for [qutebrowser](https://qutebrowser.org/), doing the job of the Bitwarden browser extension, which doesn't exist for qutebrowser. It fills logins and TOTP codes, generates passwords, and lets you browse your vault.
+Bitwarden for [qutebrowser](https://qutebrowser.org/), doing the job of the Bitwarden browser extension, which doesn't exist for qutebrowser. It fills logins, TOTP codes and payment cards, generates passwords, and lets you browse your vault.
 
 ## Why not the bundled `qute-bitwarden`?
 
@@ -23,9 +23,10 @@ See [ADR-0001](docs/adr/0001-standalone-replacement-for-upstream-userscript.md) 
 | `totp` | Fill the TOTP code of a matching Item, or copy it if `totp.clipboard` is on |
 | `generate` | Generate a password, save it to the vault, then fill it into a signup or change-password form. With no matching Item it creates one named after the host, using the username typed on the page (or asking for it); with one, it asks before replacing that Item's password; with several, you pick one or `new Item` |
 | `vault` | Pick from the whole vault; filling an Item that doesn't match the page needs a confirmation. With `vault.allow_copy` on, a second menu offers `Fill`, `Copy password`, `Copy TOTP` and `Copy username` |
+| `card` | Pick a Card item and fill the page's payment form: cardholder name, number, expiry (one field, split fields or `<select>`s) and security code. Never Auto-fills and never submits the form, whatever `auto_fill` and `submit_after_fill` say |
 | `unlock` / `lock` / `sync` / `status` | Vault controls; `status` shows locked/unlocked and the last sync time |
 
-The picker shows each Item as `<name> — <username>`.
+The picker shows each Login item as `<name> — <username>`, and each Card item as `<name> — <brand> *<last 4>` (only `<name>` for a Re-prompt item, whose number would need the master password just to list it).
 
 ## Requirements
 
@@ -97,6 +98,7 @@ config.bind(',p', 'spawn --userscript qutewarden fill')
 config.bind(',t', 'spawn --userscript qutewarden totp')
 config.bind(',g', 'spawn --userscript qutewarden generate')
 config.bind(',v', 'spawn --userscript qutewarden vault')
+config.bind(',c', 'spawn --userscript qutewarden card')
 config.bind(',u', 'spawn --userscript qutewarden unlock')
 config.bind(',l', 'spawn --userscript qutewarden lock')
 config.bind(',s', 'spawn --userscript qutewarden sync')
@@ -168,10 +170,10 @@ By default qutewarden keeps to these rules:
 2. No secret appears in process arguments or environment variables, ours or a child's. Secrets go to and from `rbw` only through stdin and stdout.
 3. No secret is written to disk.
 4. No secret goes on the clipboard unless you turn it on (`totp.clipboard`, `vault.allow_copy`), and then it is cleared after the configured time (only if the clipboard still holds it).
-5. A Fill happens only when the page's origin, checked again inside the page just before filling, is the origin the userscript was started on, **and** the Item matches the page. The only exception is a Mismatch fill from `vault` that you confirmed after seeing the Item's URIs next to the page's address, all shown host first (or verbatim where that can't be done safely) and never shortened.
-6. Messages show Item names, usernames and origins, never passwords, TOTP codes, notes or custom fields.
+5. A Fill of a Login item happens only when the page's origin, checked again inside the page just before filling, is the origin the userscript was started on, **and** the Item matches the page. The only exception is a Mismatch fill from `vault` that you confirmed after seeing the Item's URIs next to the page's address, all shown host first (or verbatim where that can't be done safely) and never shortened. A Fill of a Card item happens only after you picked it, and it too only after the origin check inside the page ([ADR-0005](docs/adr/0005-card-and-identity-items-are-filled-outside-uri-match.md)).
+6. Messages show Item names, usernames and origins, never passwords, TOTP codes, notes or custom fields. For a Card item, a message or picker line may include the brand and the last 4 digits of the number, never more of it, and never the security code or expiry.
 
-The no-leak test runs every subcommand against a fake vault and fails if a placeholder secret shows up in the FIFO, a child process's arguments or environment, or a message.
+The no-leak test runs every subcommand against a fake vault and fails if a placeholder secret (a password, TOTP code, card number or security code) shows up in the FIFO, a child process's arguments or environment, a message or a picker line.
 
 Limits:
 
@@ -180,7 +182,8 @@ Limits:
 - **No reply from the page.** qutewarden can't learn whether a Fill worked, so it says "filling `<name>`" before sending. If the origin check in the page fails (for example, you switched tab or the page navigated), nothing is filled and nothing is reported.
 - **The page sees the filled values.** The fill script runs in its own isolated JavaScript world, so page scripts can't read its variables, but once a value is in a form field the page's own scripts can read it, as with any password manager.
 - **`generate` saves before it fills**, so a failed save never leaves you with a password that exists only in the form. To create a new Item it runs twice: the first run copies the page's username into a `data-qutewarden-probe-<nonce>` attribute and spawns `qutewarden generate … --username-probe <nonce>`, which reads it from qutebrowser's DOM dump; only that second run generates the password ([ADR-0004](docs/adr/0004-generate-reads-the-username-back-through-the-dom-dump.md)). If no username comes back, the picker asks for it.
-- qutewarden relies on the layout of rbw's local db file for URI match modes ([ADR-0003](docs/adr/0003-rbw-1-15-and-match-types-from-its-db.md)); it only ever reads that file.
+- **A Card item goes to whatever page you pick it on**, a phishing page included: Card items have no URIs to match, so your choice of Item is the only guard ([ADR-0005](docs/adr/0005-card-and-identity-items-are-filled-outside-uri-match.md)). `card` never submits the form.
+- qutewarden relies on the layout of rbw's local db file for URI match modes and item types ([ADR-0003](docs/adr/0003-rbw-1-15-and-match-types-from-its-db.md)); it only ever reads that file.
 
 To report a vulnerability, see [`SECURITY.md`](SECURITY.md).
 

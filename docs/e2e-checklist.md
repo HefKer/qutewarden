@@ -37,6 +37,7 @@ On two or three real sites (one with a two-step login, one built with React or V
 - [ ] On the two-step login, `,p` on each step fills what that step asks for.
 - [ ] On a 2FA page, `,t` fills the current code and the site accepts it.
 - [ ] On a change-password page, `,g` replaces the password and fills it; the site accepts it and `rbw get` shows it. Change it back afterwards.
+- [ ] On a real checkout page (stop before paying), `card` with a test Card item lists it as `<name> — <brand> *<last 4>`, fills the number, expiry and security code (split or `<select>` expiry fields too, where the site has them) and doesn't submit.
 
 ## Clean up
 

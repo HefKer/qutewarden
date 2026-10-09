@@ -5,6 +5,8 @@
    "uris": null, "type": "Note"},
   {"id": "e5f7a9b1-3c5d-4e7f-8a9b-1c3d5e7f9a0b", "name": "Card", "user": null, "folder": null,
    "uris": null, "type": "Card"},
+  {"id": "f7b9c1d3-5e7f-4a9b-8c1d-3e5f7a9b1c2d", "name": "Old card", "user": null, "folder": null,
+   "uris": null, "type": "Card"},
   {"id": "6f1c2d4e-8a3b-4c5d-9e7f-0a1b2c3d4e5f", "name": "GitHub", "user": "alice@example.com", "folder": "Dev",
    "uris": ["https://github.com/login", "github.com", "https://gist.github.com", "https://github.com/settings",
             "https://github.com/session", "^https://([a-z]+\\.)?github\\.com/.*$", "https://evil.example"],

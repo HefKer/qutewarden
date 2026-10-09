@@ -91,6 +91,24 @@ class Login:
 
 
 @dataclass
+class Card:
+    name: str
+    cardholder: str
+    brand: str
+    number: str  # a marker ending in 4 digits, so the picker line has a "last 4"
+    exp_month: str
+    exp_year: str
+    code: str
+    reprompt: bool = False
+    id: str = ""
+
+    @property
+    def line(self) -> str:
+        """How the picker shows this Item: brand and last 4 digits, unless Re-prompt."""
+        return self.name if self.reprompt else f"{self.name} — {self.brand} *{self.number[-4:]}"
+
+
+@dataclass
 class SeededVault:
     """The seeded Items, by role."""
 
@@ -106,10 +124,15 @@ class SeededVault:
     replace: Login  # replace.test: `generate` replaces its password
     two_1: Login  # twocands.test, with two_2: `generate` offers both and a new Item
     two_2: Login
+    card: Card  # Visa, filled by `card`
+    card_reprompt: Card  # a Re-prompt Card item: listed by name only
     others: list[str] = field(default_factory=list)  # names of the Card and Identity items
 
     def logins(self) -> list[Login]:
         return [v for v in vars(self).values() if isinstance(v, Login)]
+
+    def cards(self) -> list[Card]:
+        return [v for v in vars(self).values() if isinstance(v, Card)]
 
 
 def build(markers: Markers) -> SeededVault:
@@ -138,6 +161,10 @@ def build(markers: Markers) -> SeededVault:
                       notes=s("notes-replace")),
         two_1=Login("Two Y1", "yuri", s("pw-two-1"), (Uri("https://twocands.test"),)),
         two_2=Login("Two Y2", "yara", s("pw-two-2"), (Uri("https://twocands.test"),)),
+        card=Card("Card C", "Al Ice", "Visa", s("card-number-4242"), "1", "2030",
+                  s("card-code")),
+        card_reprompt=Card("Card R", "Al Ice", "Mastercard", s("card-number-5454"), "12", "2031",
+                           s("card-code-r"), reprompt=True),
     )
 
 
@@ -147,17 +174,20 @@ def seed(client: VaultClient, vault: SeededVault, markers: Markers) -> None:
         login.id = client.create_item(_login_body(client, login))
     e = client.encrypt
     s = markers.secret
-    card = {"type": 3, "name": e("Card C"), "reprompt": 0, "notes": e(s("notes-card")),
-            "card": {"cardholderName": e("Al Ice"), "brand": e("Visa"),
-                     "number": e(s("card-number")), "expMonth": e("1"), "expYear": e("2030"),
-                     "code": e(s("card-code"))}}
+    for card in vault.cards():
+        card.id = client.create_item({
+            "type": 3, "name": e(card.name), "reprompt": 1 if card.reprompt else 0,
+            "notes": e(s(f"notes-{card.name}")),
+            "card": {"cardholderName": e(card.cardholder), "brand": e(card.brand),
+                     "number": e(card.number), "expMonth": e(card.exp_month),
+                     "expYear": e(card.exp_year), "code": e(card.code)}})
+        vault.others.append(card.name)
     identity = {"type": 4, "name": e("Ident I"), "reprompt": 0,
                 "identity": {"firstName": e("Al"), "lastName": e("Ice"),
                              "email": e("al@example.com"), "ssn": e(s("identity-ssn")),
                              "passportNumber": e(s("identity-passport"))}}
-    for name, body in (("Card C", card), ("Ident I", identity)):
-        client.create_item(body)
-        vault.others.append(name)
+    client.create_item(identity)
+    vault.others.append("Ident I")
 
 
 def _login_body(client: VaultClient, login: Login) -> dict[str, Any]:

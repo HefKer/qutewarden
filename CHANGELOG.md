@@ -9,6 +9,7 @@ All notable changes to qutewarden are listed here. The format follows [Keep a Ch
 ### Added
 
 - A home-manager module, `homeManagerModules.default` (`programs.qutewarden`): installs qutewarden, links it as a qutebrowser userscript, writes `settings` to the config file and adds `keyBindings` to `programs.qutebrowser`.
+- `card`: pick a Card item and fill the page's payment form (cardholder name, number, expiry and security code), found by `autocomplete` `cc-*` tokens or, without them, by name, id, label and placeholder. It never Auto-fills and never submits. Picker lines show the brand and last 4 digits of the number.
 
 ## [0.1.0] - 2026-10-08
 
