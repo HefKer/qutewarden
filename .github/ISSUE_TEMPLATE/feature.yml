@@ -1,0 +1,21 @@
+name: Feature request
+description: Suggest something qutewarden should do
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What you want to do and what stops you today.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: How you'd like qutewarden to handle it. If it touches the Security rules (see the README), say how it keeps them.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives
+      description: Other ways you've considered or tried.

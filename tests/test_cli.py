@@ -77,6 +77,12 @@ def test_help_lists_every_subcommand(capsys):
         assert name in out
 
 
+def test_help_has_no_backend_flag(capsys):
+    with pytest.raises(SystemExit):
+        cli.main(["fill", "--help"], environ={})
+    assert "--backend" not in capsys.readouterr().out
+
+
 def test_registry_has_every_subcommand():
     assert sorted(all_commands()) == sorted(SUBCOMMANDS)
 
@@ -126,7 +132,7 @@ def test_every_setting_has_a_flag_on_every_subcommand(environ):
     rec = Recorder()
     for name in SUBCOMMANDS:
         cli.main([name, "--totp-clipboard", "--vault-copy-clear-seconds", "5",
-                  "--backend", "rbw", "--no-insert-mode-after-fill"],
+                  "--no-insert-mode-after-fill"],
                  environ=environ, make_context=rec)
         assert rec.config.totp_clipboard is True
         assert rec.config.vault_copy_clear_seconds == 5

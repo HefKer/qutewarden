@@ -39,7 +39,6 @@ SETTINGS: tuple[Setting, ...] = (
             "dmenu-style picker command (default: fuzzel --dmenu on Wayland, rofi -dmenu on X11)"),
     Setting("auto_fill", "auto_fill", bool, False,
             "fill without asking when exactly one Candidate matches"),
-    Setting("backend", "backend", str, "rbw", "vault backend (only rbw in v1)"),
     Setting("insert_mode_after_fill", "insert_mode_after_fill", bool, True,
             "enter insert mode after filling"),
     Setting("submit_after_fill", "submit_after_fill", bool, False,
@@ -66,7 +65,6 @@ SETTINGS: tuple[Setting, ...] = (
 class Config:
     picker: tuple[str, ...] | None = None
     auto_fill: bool = False
-    backend: str = "rbw"
     insert_mode_after_fill: bool = True
     submit_after_fill: bool = False
     matching_default_mode: MatchMode = MatchMode.BASE_DOMAIN
@@ -92,6 +90,7 @@ def default_config_path(environ: Mapping[str, str]) -> Path:
 
 _BY_KEY: dict[str, Setting] = {s.key: s for s in SETTINGS}
 _BY_ATTR: dict[str, Setting] = {s.attr: s for s in SETTINGS}
+_REMOVED: frozenset[str] = frozenset({"backend"})  # keys of former settings (spec-v2 "Config")
 
 
 def load_config(path: Path | None, overrides: Mapping[str, object]) -> Config:
@@ -131,6 +130,8 @@ def _read_toml(path: Path) -> dict[str, object]:
             key = prefix + name
             if key in _BY_KEY:
                 flat[key] = value
+            elif key in _REMOVED:
+                raise ConfigError(f"{path}: the setting {key!r} was removed")
             elif isinstance(value, dict) and any(k.startswith(key + ".") for k in _BY_KEY):
                 walk(value, key + ".")
             else:
@@ -175,6 +176,4 @@ def _coerce(setting: Setting, raw: object) -> object:
             raise ConfigError(f"{setting.key} must be one of: {choices}") from None
     if not isinstance(raw, str):
         raise ConfigError(f"{setting.key} must be a string")
-    if setting.attr == "backend" and raw != "rbw":
-        raise ConfigError(f"{setting.key}: unknown backend {raw!r} (v1 supports only 'rbw')")
     return raw

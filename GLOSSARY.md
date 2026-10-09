@@ -57,7 +57,7 @@ An Item that is marked to need the master password again before any of its secre
 _Avoid_: Protected item, locked item
 
 **Backend**:
-An external Bitwarden client program that gives access to the Vault, such as `rbw` or the official `bw` CLI.
+An external Bitwarden client program that gives access to the Vault, such as `rbw`.
 _Avoid_: Provider, driver, client
 
 **Leak path**:
