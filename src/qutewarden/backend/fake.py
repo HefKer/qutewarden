@@ -65,7 +65,7 @@ FAKE_ITEMS: tuple[LoginItem, ...] = (
 FAKE_CARDS: tuple[CardItem, ...] = (
     CardItem(id="visa", name="Visa", brand="Visa", last4="4242"),
     CardItem(id="work-card", name="Work card", brand="Mastercard", last4="5454"),
-    CardItem(id="locked-card", name="Locked card", reprompt=True),
+    CardItem(id="reprompt-card", name="Re-prompt card", reprompt=True),
     CardItem(id="no-brand", name="No brand", last4="0005"),
     CardItem(id="bare-card", name="Bare card"),
 )
@@ -75,7 +75,7 @@ _CARD_VALUES: dict[str, dict[str, str]] = {
              "brand": "Visa", "exp_month": "3", "exp_year": "2030"},
     "work-card": {"cardholder_name": "Alice Example", "number": "5454545454545454",
                   "brand": "Mastercard", "exp_month": "11", "exp_year": "2031"},
-    "locked-card": {"cardholder_name": "Alice Example", "number": "4000056655665556",
+    "reprompt-card": {"cardholder_name": "Alice Example", "number": "4000056655665556",
                     "brand": "Visa", "exp_month": "1", "exp_year": "2029"},
     "no-brand": {"number": "378282246310005"},
     "bare-card": {},
@@ -94,7 +94,7 @@ def fake_card(item_id: str) -> CardSecrets:
 FAKE_IDENTITIES: tuple[IdentityItem, ...] = (
     IdentityItem(id="me", name="Me"),
     IdentityItem(id="work-identity", name="Work identity"),
-    IdentityItem(id="locked-identity", name="Locked identity", reprompt=True),
+    IdentityItem(id="reprompt-identity", name="Re-prompt identity", reprompt=True),
 )
 
 _IDENTITY_VALUES: dict[str, dict[str, str]] = {
@@ -105,7 +105,7 @@ _IDENTITY_VALUES: dict[str, dict[str, str]] = {
            "username": "alice"},
     "work-identity": {"first_name": "Alice", "last_name": "Example", "company": "Work Ltd",
                       "email": "alice@work.example"},
-    "locked-identity": {"first_name": "Alice", "passport_number": "X1234567"},
+    "reprompt-identity": {"first_name": "Alice", "passport_number": "X1234567"},
 }
 
 
