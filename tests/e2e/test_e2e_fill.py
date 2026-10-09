@@ -214,16 +214,18 @@ def test_killing_the_userscript_mid_fill_leaves_qutebrowser_responsive(
     run = qb.spawn("fill")
     request = picker.next()
     [pid] = [int(p.parent.name) for p in Path("/proc").glob("[0-9]*/cmdline")
-             if _is_qutewarden_fill(p)]
+             if _is_qutewarden_fill(p, qb.basedir)]
     os.kill(pid, signal.SIGKILL)
     run.wait()
     picker.answer(request, None)
     qb.open(pages, SINGLE)
 
 
-def _is_qutewarden_fill(cmdline: Path) -> bool:
+def _is_qutewarden_fill(cmdline: Path, basedir: Path) -> bool:
+    """Whether the process runs this session's fill (other sessions may be running)."""
     try:
         argv = cmdline.read_bytes().split(b"\0")
     except OSError:
         return False
-    return any(a.endswith(b"/userscripts/qutewarden") for a in argv) and b"fill" in argv
+    script = str(basedir / "data" / "userscripts" / "qutewarden").encode()
+    return script in argv and b"fill" in argv
