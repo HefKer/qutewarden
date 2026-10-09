@@ -121,20 +121,24 @@ def _probed_username(dump_path: str | None, nonce: str) -> str | None:
     return value or None
 
 
-def _choose_item(ctx: Context, found: list[LoginItem]) -> LoginItem | None:
+def _choose_item(ctx: Context, found: list[match.Candidate]) -> LoginItem | None:
     """The Candidate whose password to replace, or None for a new Item."""
     if not found:
         return None
     if len(found) == 1:
-        [item] = found
-        if not ctx.picker.confirm(f"Replace password for {item.username} on {item.name}?"):
+        [candidate] = found
+        item = candidate.item
+        where = item.name
+        if candidate.equivalent_domain:
+            where += f" ({candidate.equivalent_domain})"
+        if not ctx.picker.confirm(f"Replace password for {item.username} on {where}?"):
             raise UserCancelled()
         return item
     index = ctx.picker.choose("Replace password",
-                              [*(flow.item_line(item) for item in found), NEW_ITEM_LINE])
+                              [*(flow.candidate_line(c) for c in found), NEW_ITEM_LINE])
     if index is None:
         raise UserCancelled()
-    return found[index] if index < len(found) else None
+    return found[index].item if index < len(found) else None
 
 
 def _probe_username(ctx: Context, args: argparse.Namespace, origin: str) -> None:

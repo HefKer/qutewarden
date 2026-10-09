@@ -126,6 +126,7 @@ class SeededVault:
     two_2: Login
     card: Card  # Visa, filled by `card`
     card_reprompt: Card  # a Re-prompt Card item: listed by name only
+    equivalent: Login  # equiv-a.test, a Candidate on equiv-b.test through the user's group
     others: list[str] = field(default_factory=list)  # names of the Card and Identity items
 
     def logins(self) -> list[Login]:
@@ -165,6 +166,7 @@ def build(markers: Markers) -> SeededVault:
                   s("card-code")),
         card_reprompt=Card("Card R", "Al Ice", "Mastercard", s("card-number-5454"), "12", "2031",
                            s("card-code-r"), reprompt=True),
+        equivalent=Login("Equiv E", "ella", s("pw-equivalent"), (Uri("https://equiv-a.test"),)),
     )
 
 

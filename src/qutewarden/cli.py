@@ -37,7 +37,8 @@ def _settings_parser() -> argparse.ArgumentParser:
                         help="config file (default: $XDG_CONFIG_HOME/qutewarden/config.toml)")
     group = parser.add_argument_group("settings (override the config file)")
     for setting in SETTINGS:
-        _add_setting_flag(group, setting)
+        if setting.has_flag:
+            _add_setting_flag(group, setting)
     return parser
 
 

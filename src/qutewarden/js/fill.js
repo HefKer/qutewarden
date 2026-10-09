@@ -10,11 +10,22 @@ function inputType(el) {
   return (el.getAttribute("type") || "").toLowerCase();
 }
 
+// The element's own window: a frame's elements belong to the frame's realm,
+// so `instanceof` and prototype setters must come from there.
+function viewOf(el) {
+  return el && el.ownerDocument ? el.ownerDocument.defaultView : null;
+}
+
+function isInput(el) {
+  const view = viewOf(el);
+  return Boolean(view) && el instanceof view.HTMLInputElement;
+}
+
 function isUsable(el) {
-  if (!(el instanceof HTMLInputElement) || el.disabled || el.readOnly) return false;
+  if (!isInput(el) || el.disabled || el.readOnly) return false;
   if (inputType(el) === "hidden") return false;
   if (el.getClientRects().length === 0) return false;
-  const style = getComputedStyle(el);
+  const style = viewOf(el).getComputedStyle(el);
   return style.visibility !== "hidden" && style.display !== "none";
 }
 
@@ -70,25 +81,26 @@ function findLoginPasswordField(root) {
     || fields[0] || null;
 }
 
-const nativeValueSetter =
-  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
-const nativeSelectValueSetter =
-  Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set;
+function isSelect(el) {
+  const view = viewOf(el);
+  return Boolean(view) && el instanceof view.HTMLSelectElement;
+}
 
 // Set through the prototype's setter so framework value trackers (React)
 // notice the change, then fire bubbling input + change events.
 function setValue(el, value) {
-  const setter = el instanceof HTMLSelectElement ? nativeSelectValueSetter : nativeValueSetter;
-  setter.call(el, value);
+  const view = viewOf(el);
+  const proto = isSelect(el) ? view.HTMLSelectElement.prototype : view.HTMLInputElement.prototype;
+  Object.getOwnPropertyDescriptor(proto, "value").set.call(el, value);
   el.dispatchEvent(new Event("input", { bubbles: true }));
   el.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
 // The focused input, if it is one we could fill (a focused search box or
 // checkbox counts as no focus).
-function focusedInput() {
-  const el = document.activeElement;
-  if (!(el instanceof HTMLInputElement) || !isUsable(el)) return null;
+function focusedInput(doc) {
+  const el = doc.activeElement;
+  if (!isUsable(el)) return null;
   return inputType(el) === "password" || isTextish(el) || looksLikeOtp(el) ? el : null;
 }
 
@@ -99,13 +111,13 @@ function loginFields(root) {
 // Where to look for fields: the focused input's <form>, or (no form) its
 // nearest ancestor that holds another field (`fields(root)` lists them);
 // else the document.
-function scopeFor(focused, fields = loginFields) {
-  if (!focused) return document;
+function scopeFor(doc, focused, fields = loginFields) {
+  if (!focused) return doc;
   if (focused.form) return focused.form;
   for (let el = focused.parentElement; el; el = el.parentElement) {
     if (fields(el).some((field) => field !== focused)) return el;
   }
-  return document;
+  return doc;
 }
 
 function fillLogin(root, a, focused) {
@@ -214,9 +226,9 @@ const CONTROL_TYPES = ["text", "email", "tel", "number", "password", "search", "
 const NOT_A_KIND = /^(on|off|section-.*|shipping|billing|home|work|mobile|fax|pager)?$/;
 
 function isFillableControl(el) {
-  if (el instanceof HTMLSelectElement) {
+  if (isSelect(el)) {
     return !el.disabled && el.getClientRects().length > 0
-      && getComputedStyle(el).visibility !== "hidden";
+      && viewOf(el).getComputedStyle(el).visibility !== "hidden";
   }
   return isUsable(el) && CONTROL_TYPES.includes(inputType(el));
 }
@@ -226,8 +238,8 @@ function fillableControls(root) {
 }
 
 // The focused input or select, if it is one a kind could fill.
-function focusedControl() {
-  const el = document.activeElement;
+function focusedControl(doc) {
+  const el = doc.activeElement;
   return el && isFillableControl(el) ? el : null;
 }
 
@@ -278,7 +290,7 @@ function fillKinds(root, kinds, words, v) {
     const name = kindOf(el, kinds, words);
     if (!name) continue;
     const kind = kinds.get(name);
-    if (el instanceof HTMLSelectElement) {
+    if (isSelect(el)) {
       if (selectOption(el, kind, v)) filled.push(el);
       continue;
     }
@@ -368,10 +380,10 @@ const CARD_WORDS = [
   [/card.?(type|brand)|cc.?type/i, "cc-type"],
 ];
 
-// Never submits: an unwanted submit can be a purchase (ADR-0005).
-function fillCard(card) {
-  const focused = focusedControl();
-  fillKinds(scopeFor(focused, fillableControls), CARD_KINDS, CARD_WORDS, card);
+// Fill a Card item into doc (scoped by the focused field); return the fields
+// filled. Never submits: an unwanted submit can be a purchase (ADR-0005).
+function fillCard(doc, focused, card) {
+  return fillKinds(scopeFor(doc, focused, fillableControls), CARD_KINDS, CARD_WORDS, card);
 }
 
 // Submit controls for pages without a <form>, best first. Each selector is
@@ -439,36 +451,105 @@ function submitAfter(filled) {
   if (button) button.click();
 }
 
+// Frames (spec-v2 "Iframes"): only same-origin frames are reachable. A
+// cross-origin frame's contentDocument is null or throws a SecurityError,
+// so it is skipped together with everything inside it.
+function frameDocument(el) {
+  if (!el || !["iframe", "frame"].includes(el.localName)) return null;
+  try {
+    return el.contentDocument;
+  } catch (e) {
+    if (e && e.name === "SecurityError") return null;
+    throw e;
+  }
+}
+
+// The top document, then every reachable frame's document in tree order.
+function reachableDocuments(doc) {
+  const docs = [doc];
+  for (const el of doc.querySelectorAll("iframe, frame")) {
+    const inner = frameDocument(el);
+    if (inner) docs.push(...reachableDocuments(inner));
+  }
+  return docs;
+}
+
+// The innermost reachable document that has focus.
+function focusedDocument(doc) {
+  for (let inner = frameDocument(doc.activeElement); inner;
+    inner = frameDocument(doc.activeElement)) {
+    doc = inner;
+  }
+  return doc;
+}
+
+// The documents to try, best first, each with its focused input: the
+// focused document if it has a fillable focused input, then the rest in
+// tree order. Only documents whose own origin is the expected one.
+// `focusOf(doc)` is the mode's idea of a focused field (focusedControl for
+// Card items, which also counts a <select>).
+function fillTargets(top, origin, focusOf = focusedInput) {
+  const focusedDoc = focusedDocument(top);
+  const focused = focusOf(focusedDoc);
+  const docs = reachableDocuments(top);
+  const ordered = focused ? [focusedDoc, ...docs.filter((d) => d !== focusedDoc)] : docs;
+  return ordered
+    .filter((doc) => doc.location && doc.location.origin === origin)
+    .map((doc) => ({ doc, focused: doc === focusedDoc ? focused : null }));
+}
+
 function probeAttribute(nonce) {
   return `data-qutewarden-probe-${nonce}`;
 }
 
 // Secret-free: copy the username the user typed on a signup page into an
 // attribute that qutebrowser's DOM dump (QUTE_HTML) carries back to Python.
-function probeUsername(root, focused, nonce) {
-  const field = findSignupUsernameField(root, focused);
-  document.documentElement.setAttribute(probeAttribute(nonce), field ? field.value : "");
+// The attribute goes on the top document, the one QUTE_HTML dumps.
+function probeUsername(targets, nonce) {
+  let value = "";
+  for (const { doc, focused } of targets) {
+    const field = findSignupUsernameField(scopeFor(doc, focused), focused);
+    if (field) {
+      value = field.value;
+      break;
+    }
+  }
+  document.documentElement.setAttribute(probeAttribute(nonce), value);
 }
 
-function qutewardenFill(a) {
-  if (location.origin !== a.origin) return;
-  if (a.mode === "card") {
-    fillCard(a.card);
-    return;
-  }
-  const focused = focusedInput();
-  const root = scopeFor(focused);
-  if (a.mode === "probe") {
-    probeUsername(root, focused, a.probeNonce);
-    return;
-  }
-  if (a.probeNonce) document.documentElement.removeAttribute(probeAttribute(a.probeNonce));
-  let filled = [];
+function fillDocument(root, a, focused) {
   switch (a.mode) {
-    case "auto": filled = fillAuto(root, a, focused); break;
-    case "login": filled = fillLogin(root, a, focused); break;
-    case "otp": filled = fillOtp(root, a, focused); break;
-    case "new_password": filled = fillNewPassword(root, a, focused); break;
+    case "auto": return fillAuto(root, a, focused);
+    case "login": return fillLogin(root, a, focused);
+    case "otp": return fillOtp(root, a, focused);
+    case "new_password": return fillNewPassword(root, a, focused);
   }
-  if (a.submit && filled.length) submitAfter(filled);
+  return [];
+}
+
+// Fills the first target document in which the mode finds fields.
+function qutewardenFill(a) {
+  if (a.mode === "card") {
+    // Never submits, whatever `a.submit` says (ADR-0005).
+    for (const { doc, focused } of fillTargets(document, a.origin, focusedControl)) {
+      if (fillCard(doc, focused, a.card).length) return;
+    }
+    return;
+  }
+  const targets = fillTargets(document, a.origin);
+  if (!targets.length) return;
+  if (a.mode === "probe") {
+    probeUsername(targets, a.probeNonce);
+    return;
+  }
+  if (a.probeNonce && location.origin === a.origin) {
+    document.documentElement.removeAttribute(probeAttribute(a.probeNonce));
+  }
+  for (const { doc, focused } of targets) {
+    const filled = fillDocument(scopeFor(doc, focused), a, focused);
+    if (filled.length) {
+      if (a.submit) submitAfter(filled);
+      return;
+    }
+  }
 }

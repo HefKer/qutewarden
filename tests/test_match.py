@@ -4,8 +4,10 @@ import pytest
 
 from qutewarden.errors import QutewardenError
 from qutewarden.match import (
+    Candidate,
     candidates,
     is_candidate,
+    load_equivalent_domains,
     make_suffix_extractor,
     origin_of,
     uri_matches,
@@ -159,7 +161,7 @@ ITEMS = (
 
 def test_candidates_are_items_with_any_matching_uri(extractor):
     found = candidates(ITEMS, PAGE, default_mode=BD, extractor=extractor)
-    assert [item.id for item in found] == ["one", "any"]
+    assert found == [Candidate(ITEMS[0]), Candidate(ITEMS[1])]
 
 
 @pytest.mark.parametrize("item", ITEMS, ids=lambda item: item.id)
@@ -172,3 +174,60 @@ def test_item_without_uris_is_never_a_candidate(extractor):
     item = LoginItem("no-uris", "github.com")
     for mode in MatchMode:
         assert not is_candidate(item, PAGE, default_mode=mode, extractor=extractor)
+
+
+# --- Equivalent domains --------------------------------------------------------
+
+GLOBAL = load_equivalent_domains(global_groups=True)
+NONE = load_equivalent_domains(global_groups=False)
+GOOGLE = LoginItem("g", "Google", "me@gmail.com", (ItemUri("https://accounts.google.com"),))
+
+
+def test_an_item_is_a_candidate_on_a_domain_in_a_global_group_and_shows_its_domain(extractor):
+    [found] = candidates([GOOGLE], "https://www.youtube.com/", default_mode=BD,
+                         extractor=extractor, equivalent_domains=GLOBAL)
+    assert found == Candidate(GOOGLE, equivalent_domain="google.com")
+
+
+def test_with_global_groups_off_an_item_is_not_a_candidate_on_an_equivalent_domain(extractor):
+    assert not is_candidate(GOOGLE, "https://www.youtube.com/", default_mode=BD,
+                            extractor=extractor, equivalent_domains=NONE)
+
+
+def test_a_users_own_group_makes_its_domains_equivalent(extractor):
+    mine = load_equivalent_domains(global_groups=False,
+                                   user_groups=[["Example.COM", "example.org"]])
+    item = LoginItem("e", "Example", "bob", (ItemUri("https://example.com"),))
+    [found] = candidates([item], "https://login.example.org/", default_mode=BD,
+                         extractor=extractor, equivalent_domains=mine)
+    assert found == Candidate(item, equivalent_domain="example.com")
+
+
+def test_user_groups_add_to_the_global_ones(extractor):
+    both = load_equivalent_domains(global_groups=True, user_groups=[["google.com", "g.test"]])
+    for page in ("https://youtube.com/", "https://g.test/"):
+        assert is_candidate(GOOGLE, page, default_mode=BD, extractor=extractor,
+                            equivalent_domains=both)
+
+
+@pytest.mark.parametrize("mode", [NEVER, EXACT, HOST, SW, RE])
+def test_equivalent_domains_apply_only_to_the_base_domain_mode(extractor, mode):
+    item = LoginItem("g", "Google", "me", (ItemUri("https://youtube.com/", mode),))
+    assert not is_candidate(item, "https://google.com/", default_mode=BD, extractor=extractor,
+                            equivalent_domains=GLOBAL)
+
+
+@pytest.mark.parametrize(("default_mode", "expected"), [(BD, True), (HOST, False)])
+def test_uris_without_a_mode_use_equivalent_domains_only_under_a_base_domain_default(
+        extractor, default_mode, expected):
+    assert is_candidate(GOOGLE, "https://youtube.com/", default_mode=default_mode,
+                        extractor=extractor, equivalent_domains=GLOBAL) is expected
+
+
+def test_an_item_with_a_direct_uri_match_is_not_shown_as_equivalent(extractor):
+    item = LoginItem("g", "Google", "me", (ItemUri("https://google.com"),
+                                           ItemUri("https://youtube.com")))
+    [found] = candidates([item], "https://youtube.com/", default_mode=BD, extractor=extractor,
+                         equivalent_domains=GLOBAL)
+    assert found.equivalent_domain is None
+
