@@ -106,7 +106,6 @@ Settings live in `$XDG_CONFIG_HOME/qutewarden/config.toml` (usually `~/.config/q
 # picker = "fuzzel --dmenu"         # unset: fuzzel --dmenu on Wayland, rofi -dmenu on X11
                                     # a string is split like a shell command; a list also works
 auto_fill = false                   # fill without the picker when exactly one Item matches
-backend = "rbw"                     # only rbw in v1
 insert_mode_after_fill = true
 submit_after_fill = false
 
@@ -134,7 +133,6 @@ copy_clear_seconds = 30
 |---|---|
 | `picker` | `--picker CMD` |
 | `auto_fill` | `--auto-fill` / `--no-auto-fill` |
-| `backend` | `--backend NAME` |
 | `insert_mode_after_fill` | `--insert-mode-after-fill` / `--no-insert-mode-after-fill` |
 | `submit_after_fill` | `--submit-after-fill` / `--no-submit-after-fill` |
 | `matching.default_mode` | `--matching-default-mode MODE` |

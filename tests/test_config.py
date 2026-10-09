@@ -10,7 +10,6 @@ def test_defaults_match_spec_when_file_missing(tmp_path: Path):
     cfg = load_config(tmp_path / "missing.toml", {})
     assert cfg.picker is None
     assert cfg.auto_fill is False
-    assert cfg.backend == "rbw"
     assert cfg.insert_mode_after_fill is True
     assert cfg.submit_after_fill is False
     assert cfg.matching_default_mode is MatchMode.BASE_DOMAIN
@@ -54,7 +53,6 @@ clipboard_clear_seconds = 10
     assert cfg.generator_symbols is False
     assert cfg.totp_clipboard_clear_seconds == 10
     # untouched settings keep their defaults
-    assert cfg.backend == "rbw"
     assert cfg.generator_digits is True
 
 
@@ -85,13 +83,17 @@ def test_picker_accepts_toml_list(tmp_path: Path):
     "[generator]\nlength = '24'\n",
     "[generator]\nlength = 3\n",
     "[matching]\ndefault_mode = 'fuzzy'\n",
-    "backend = 'bw'\n",
     "picker = 5\n",
     "this is not toml",
 ])
 def test_invalid_toml_raises_config_error(tmp_path: Path, text: str):
     with pytest.raises(ConfigError):
         load_config(write(tmp_path, text), {})
+
+
+def test_backend_setting_is_rejected_as_removed(tmp_path: Path):
+    with pytest.raises(ConfigError, match="'backend' was removed"):
+        load_config(write(tmp_path, 'backend = "rbw"\n'), {})
 
 
 def test_default_config_path_uses_xdg_config_home():
