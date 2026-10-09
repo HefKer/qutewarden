@@ -25,3 +25,11 @@ jobs:
       # (qt.chromium.sandboxing = disable-all, CI only).
       - run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - run: nix develop -c scripts/check --e2e -m e2e
+        env:
+          QW_E2E_KEEP: "1"  # keep the session root for the logs below
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-logs
+          path: /tmp/qw*/*.log
+          if-no-files-found: ignore
