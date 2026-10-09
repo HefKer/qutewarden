@@ -6,9 +6,14 @@ come back only through stdout (``rbw get --raw``). Error text never includes
 stdin data or the output of secret-returning commands.
 
 Re-prompt items make rbw ask for the master password on every decryption, so:
-``list_logins`` never decrypts an Item (``rbw list --raw`` plus the match types
-read from rbw's local db file), and ``get_secrets`` makes exactly one
-``rbw get --raw`` call and computes the TOTP code locally.
+``list_logins`` and ``list_identities`` never decrypt an Item (``rbw list --raw``
+plus what rbw's local db file says), ``list_cards`` decrypts only Card items
+that aren't Re-prompt items (for their brand and last 4 digits), and ``get_secrets``
+makes exactly one ``rbw get --raw`` call and computes the TOTP code locally.
+
+``rbw get --raw`` doesn't say which item type it printed, so the type always
+comes from the db file (ADR-0003, amendment for v2). Nor does it say what a
+linked Custom field stands for: that ``linked_id`` comes from the db file too.
 """
 
 from __future__ import annotations
@@ -18,9 +23,11 @@ import os
 import re
 import time
 from collections.abc import Callable, Mapping
+from dataclasses import dataclass, fields
 from datetime import UTC, datetime
+from enum import StrEnum
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
 from qutewarden import proc
 from qutewarden.backend.base import (
@@ -32,8 +39,23 @@ from qutewarden.backend.base import (
     SaveFailed,
     UnlockFailed,
 )
-from qutewarden.model import ItemUri, LoginItem, MatchMode, Secrets, Status
+from qutewarden.model import (
+    CardItem,
+    CardSecrets,
+    CustomField,
+    FieldKind,
+    IdentityItem,
+    IdentitySecrets,
+    ItemSecrets,
+    ItemUri,
+    LoginItem,
+    LoginSecrets,
+    MatchMode,
+    Status,
+)
 from qutewarden.totp import totp_code
+
+_S = TypeVar("_S", bound=ItemSecrets)
 
 MIN_VERSION = (1, 15)
 _NOT_LOGGED_IN_STDERR = "failed to find email address in config"
@@ -57,6 +79,30 @@ _MATCH_TYPES = {
     4: MatchMode.REGULAR_EXPRESSION,
     5: MatchMode.NEVER,
 }
+
+
+class _ItemType(StrEnum):
+    """The item types qutewarden fills, spelled as rbw's db file and ``rbw list`` spell them."""
+
+    LOGIN = "Login"
+    CARD = "Card"
+    IDENTITY = "Identity"
+
+    @classmethod
+    def of(cls, name: object) -> _ItemType | None:
+        """The member spelled ``name``, or None for any other type."""
+        return next((member for member in cls if member.value == name), None)
+
+
+@dataclass(frozen=True)
+class _DbEntry:
+    """The non-secret, unencrypted bits of one Item in rbw's db file."""
+
+    type: _ItemType | None  # None for the types qutewarden doesn't fill (SecureNote, SshKey)
+    reprompt: bool
+    has_totp: bool = False
+    match_types: tuple[object, ...] = ()  # one per URI, Login items only
+    linked_ids: tuple[object, ...] = ()  # one per Custom field (None unless linked)
 
 
 class RbwBackend(Backend):
@@ -97,16 +143,13 @@ class RbwBackend(Backend):
     # --- reading ----------------------------------------------------------------
 
     def list_logins(self) -> list[LoginItem]:
-        listed = _parse_json(self._run_checked(["list", "--raw"]).stdout, "rbw list")
-        db = self._read_db()
         logins = []
-        for entry in listed:
-            if entry.get("type") != "Login":
+        for entry, info in self._listed():
+            if entry.get("type") != _ItemType.LOGIN:
                 continue
             uris = [u for u in entry.get("uris") or [] if isinstance(u, str)]
-            info = db.get(entry["id"])
-            if info is not None and len(info["match_types"]) == len(uris):
-                modes = [_match_mode(m) for m in info["match_types"]]
+            if info is not None and len(info.match_types) == len(uris):
+                modes = [_match_mode(m) for m in info.match_types]
             else:  # rbw dropped an undecryptable URI: never guess a looser mode
                 modes = [MatchMode.NEVER] * len(uris)
             logins.append(LoginItem(
@@ -114,13 +157,53 @@ class RbwBackend(Backend):
                 name=entry.get("name") or "",
                 username=entry.get("user") or None,
                 uris=tuple(ItemUri(uri, mode) for uri, mode in zip(uris, modes)),
-                has_totp=bool(info and info["has_totp"]),
-                reprompt=bool(info and info["reprompt"]),
+                has_totp=bool(info and info.has_totp),
+                reprompt=bool(info and info.reprompt),
             ))
         return logins
 
-    def get_secrets(self, item_id: str) -> Secrets:
-        data = self._get_raw(item_id).get("data") or {}
+    def list_cards(self) -> list[CardItem]:
+        cards = []
+        for entry, info in self._listed():
+            if info is None or info.type is not _ItemType.CARD:
+                continue
+            card = CardItem(id=entry["id"], name=entry.get("name") or "", reprompt=info.reprompt)
+            if not info.reprompt:  # a Re-prompt item would ask for the master password
+                data = self._get_data(card.id)
+                card = CardItem(id=card.id, name=card.name, brand=_text(data.get("brand")),
+                                last4=_last4(_text(data.get("number"))))
+            cards.append(card)
+        return cards
+
+    def list_identities(self) -> list[IdentityItem]:
+        return [IdentityItem(id=entry["id"], name=entry.get("name") or "", reprompt=info.reprompt)
+                for entry, info in self._listed()
+                if info is not None and info.type is _ItemType.IDENTITY]
+
+    def _listed(self) -> list[tuple[dict[str, Any], _DbEntry | None]]:
+        """``rbw list --raw``, each entry next to its bits from the db file (None if absent)."""
+        listed = _parse_json(self._run_checked(["list", "--raw"]).stdout, "rbw list")
+        db = self._read_db()
+        return [(entry, db.get(entry.get("id"))) for entry in listed]
+
+    def get_secrets(self, item_id: str) -> ItemSecrets:
+        info = self._read_db().get(item_id)
+        if info is None:
+            raise ItemNotFound("rbw has no item with that id", hint=_SYNC_HINT)
+        if info.type is None:
+            raise BackendError("this item type can't be filled")
+        item = self._get_raw(item_id)
+        data = item.get("data")
+        data = data if isinstance(data, dict) else {}
+        custom = _custom_fields(item.get("fields"), info.linked_ids, data)
+        if info.type is _ItemType.LOGIN:
+            return self._login_secrets(data, custom)
+        if info.type is _ItemType.CARD:
+            return _values(CardSecrets, data, custom)
+        return _values(IdentitySecrets, data, custom)
+
+    def _login_secrets(self, data: dict[str, Any],
+                       custom: tuple[CustomField, ...]) -> LoginSecrets:
         seed = data.get("totp")
         code = None
         if seed:
@@ -128,7 +211,7 @@ class RbwBackend(Backend):
                 code = totp_code(seed, now=self._clock())
             except ValueError:
                 raise BackendError("this item's TOTP secret isn't valid") from None
-        return Secrets(password=data.get("password"), totp=code)
+        return LoginSecrets(password=data.get("password"), totp=code, fields=custom)
 
     # --- writing ----------------------------------------------------------------
 
@@ -207,6 +290,11 @@ class RbwBackend(Backend):
             raise BackendError("couldn't parse rbw get output")
         return item
 
+    def _get_data(self, item_id: str) -> dict[str, Any]:
+        """The Item's values from one ``rbw get --raw`` (keys as rbw names them)."""
+        data = self._get_raw(item_id).get("data")
+        return data if isinstance(data, dict) else {}
+
     def _db_path(self) -> Path:
         """rbw's local db file: <cache>/<profile>/<server>:<email>.json (rbw src/dirs.rs)."""
         config = _parse_json(self._run_checked(["config", "show"]).stdout, "rbw config show")
@@ -223,8 +311,9 @@ class RbwBackend(Backend):
         profile = self._environ.get("RBW_PROFILE", "")
         return Path(base) / (f"rbw-{profile}" if profile else "rbw")
 
-    def _read_db(self) -> dict[str, dict[str, Any]]:
-        """Read only the non-secret, unencrypted bits we need: id -> reprompt/totp/match types.
+    def _read_db(self) -> dict[str, _DbEntry]:
+        """Read only the non-secret, unencrypted bits we need: id -> type, reprompt, URI
+        modes, linked field ids.
 
         The file is opened read-only and never written. Everything else in it
         (tokens, encrypted fields) is dropped right away.
@@ -237,17 +326,27 @@ class RbwBackend(Backend):
             raise BackendError("can't read rbw's local db file", hint=_SYNC_HINT) from None
         db = {}
         for entry in entries:
+            # rbw's Data enum: {"Login": {...}}, {"Card": {...}}, ... or "SecureNote".
             data = entry.get("data")
-            login = data.get("Login") if isinstance(data, dict) else None
-            if not isinstance(login, dict):
+            if isinstance(data, dict) and len(data) == 1:
+                [(item_type, values)] = data.items()
+            elif isinstance(data, str):
+                item_type, values = data, None
+            else:
                 continue
-            db[entry.get("id")] = {
-                "reprompt": entry.get("master_password_reprompt") not in (None, 0),
-                "has_totp": login.get("totp") is not None,
-                # Old dbs store bare URI strings, which rbw treats as match_type None.
-                "match_types": [u.get("match_type") if isinstance(u, dict) else None
-                                for u in login.get("uris") or []],
-            }
+            reprompt = entry.get("master_password_reprompt") not in (None, 0)
+            linked_ids = tuple(f.get("linked_id") if isinstance(f, dict) else None
+                               for f in entry.get("fields") or [])
+            known = _ItemType.of(item_type)
+            if known is _ItemType.LOGIN and isinstance(values, dict):
+                db[entry.get("id")] = _DbEntry(
+                    _ItemType.LOGIN, reprompt, has_totp=values.get("totp") is not None,
+                    # Old dbs store bare URI strings, which rbw treats as match_type None.
+                    match_types=tuple(u.get("match_type") if isinstance(u, dict) else None
+                                      for u in values.get("uris") or []),
+                    linked_ids=linked_ids)
+            else:
+                db[entry.get("id")] = _DbEntry(known, reprompt, linked_ids=linked_ids)
         return db
 
 
@@ -268,6 +367,73 @@ def _match_mode(match_type: object) -> MatchMode | None:
     if not isinstance(match_type, int):
         return MatchMode.NEVER  # unknown: never match
     return _MATCH_TYPES.get(match_type, MatchMode.NEVER)
+
+
+def _values(cls: type[_S], data: dict[str, Any], custom: tuple[CustomField, ...]) -> _S:
+    """``cls`` with its Custom fields, and each value from rbw's key of the same name."""
+    return cls(fields=custom, **{f.name: _text(data.get(f.name))
+                                 for f in fields(cls) if f.name != "fields"})
+
+
+# Bitwarden's LinkedIdType -> the rbw key of the built-in value a linked field stands for.
+_LINKED_KEYS = {
+    100: "username", 101: "password",
+    300: "cardholder_name", 301: "exp_month", 302: "exp_year", 303: "code", 304: "brand",
+    305: "number",
+    400: "title", 401: "middle_name", 402: "address1", 403: "address2", 404: "address3",
+    405: "city", 406: "state", 407: "postal_code", 408: "country", 409: "company",
+    410: "email", 411: "phone", 412: "ssn", 413: "username", 414: "passport_number",
+    415: "license_number", 416: "first_name", 417: "last_name",
+}
+_IDENTITY_FULL_NAME = 418
+_FIELD_KINDS = {kind.value: kind for kind in FieldKind}
+
+
+def _custom_fields(raw: object, linked_ids: tuple[object, ...],
+                   data: dict[str, Any]) -> tuple[CustomField, ...]:
+    """The Item's Custom fields from ``rbw get --raw``, linked ones resolved.
+
+    rbw prints the fields in the db file's order, so the db's ``linked_id`` for
+    field i is ``linked_ids[i]``. If the two lists differ in length (the db file
+    is out of date), a linked field can't be resolved and is left out, as are
+    fields without a name or of an unknown kind.
+    """
+    raw = raw if isinstance(raw, list) else []
+    lined_up = len(raw) == len(linked_ids)
+    custom = []
+    for i, field in enumerate(raw):
+        if not isinstance(field, dict):
+            continue
+        name, kind = _text(field.get("name")), _FIELD_KINDS.get(str(field.get("type")))
+        if name is None or kind is None:
+            continue
+        if kind is FieldKind.LINKED:
+            value = _linked_value(linked_ids[i], data) if lined_up else None
+            if value is None:
+                continue
+        else:
+            value = _text(field.get("value"))
+        custom.append(CustomField(name, kind, value))
+    return tuple(custom)
+
+
+def _linked_value(linked_id: object, data: dict[str, Any]) -> str | None:
+    """The built-in value a linked field stands for, or None."""
+    if linked_id == _IDENTITY_FULL_NAME:
+        names = (_text(data.get(key)) for key in ("first_name", "middle_name", "last_name"))
+        return " ".join(name for name in names if name) or None
+    key = _LINKED_KEYS.get(linked_id) if isinstance(linked_id, int) else None
+    return _text(data.get(key)) if key is not None else None
+
+
+def _text(value: object) -> str | None:
+    return value if isinstance(value, str) and value else None
+
+
+def _last4(number: str | None) -> str | None:
+    """The last 4 digits of a card number (Security rule 6 allows no more), if it has 4."""
+    digits = re.sub(r"\D", "", number or "")
+    return digits[-4:] if len(digits) >= 4 else None
 
 
 def _check_password(password: str) -> None:

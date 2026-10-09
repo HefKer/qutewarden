@@ -1,0 +1,46 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Checkout (selects)</title></head>
+<body>
+  <form id="checkout" action="/order" method="post">
+    <input type="text" name="name" id="cc-name" autocomplete="cc-name">
+    <select name="type" id="cc-type" autocomplete="cc-type">
+      <option value="">Card type</option>
+      <option value="AMEX">American Express</option>
+      <option value="MC">Mastercard</option>
+      <option value="VI">Visa</option>
+    </select>
+    <input type="text" name="number" id="cc-number" autocomplete="cc-number">
+    <select name="month" id="cc-exp-month" autocomplete="cc-exp-month">
+      <option value="">Month</option>
+      <option value="1">01 - January</option>
+      <option value="2">02 - February</option>
+      <option value="3">03 - March</option>
+      <option value="4">04 - April</option>
+      <option value="5">05 - May</option>
+      <option value="6">06 - June</option>
+      <option value="7">07 - July</option>
+      <option value="8">08 - August</option>
+      <option value="9">09 - September</option>
+      <option value="10">10 - October</option>
+      <option value="11">11 - November</option>
+      <option value="12">12 - December</option>
+    </select>
+    <select name="year" id="cc-exp-year" autocomplete="cc-exp-year">
+      <option value="">Year</option>
+      <option value="26">2026</option>
+      <option value="28">2028</option>
+      <option value="30">2030</option>
+      <option value="32">2032</option>
+    </select>
+    <input type="text" name="cvc" id="cc-csc" autocomplete="cc-csc">
+    <button type="submit">Pay</button>
+  </form>
+  <script>
+    window.events = [];
+    for (const el of document.querySelectorAll("select")) {
+      el.addEventListener("change", (e) => window.events.push([e.target.id, e.type]));
+    }
+  </script>
+</body>
+</html>

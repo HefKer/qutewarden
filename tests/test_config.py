@@ -13,6 +13,8 @@ def test_defaults_match_spec_when_file_missing(tmp_path: Path):
     assert cfg.insert_mode_after_fill is True
     assert cfg.submit_after_fill is False
     assert cfg.matching_default_mode is MatchMode.BASE_DOMAIN
+    assert cfg.matching_global_equivalent_domains is True
+    assert cfg.matching_equivalent_domains == ()
     assert cfg.generator_length == 24
     assert cfg.generator_uppercase is True
     assert cfg.generator_lowercase is True
@@ -84,11 +86,27 @@ def test_picker_accepts_toml_list(tmp_path: Path):
     "[generator]\nlength = 3\n",
     "[matching]\ndefault_mode = 'fuzzy'\n",
     "picker = 5\n",
+    "[matching]\nglobal_equivalent_domains = 1\n",
+    "[matching]\nequivalent_domains = ['a.test', 'b.test']\n",
+    "[matching]\nequivalent_domains = [['a.test', 2]]\n",
+    "[matching]\nequivalent_domains = 'a.test'\n",
     "this is not toml",
 ])
 def test_invalid_toml_raises_config_error(tmp_path: Path, text: str):
     with pytest.raises(ConfigError):
         load_config(write(tmp_path, text), {})
+
+
+def test_equivalent_domains_are_read_as_groups_of_base_domains(tmp_path: Path):
+    path = write(tmp_path, """
+[matching]
+global_equivalent_domains = false
+equivalent_domains = [["example.com", "example.org"], ["a.test", "b.test", "c.test"]]
+""")
+    cfg = load_config(path, {})
+    assert cfg.matching_global_equivalent_domains is False
+    assert cfg.matching_equivalent_domains == (("example.com", "example.org"),
+                                               ("a.test", "b.test", "c.test"))
 
 
 def test_backend_setting_is_rejected_as_removed(tmp_path: Path):
@@ -112,3 +130,4 @@ def test_setting_flag_names():
     assert flags["auto_fill"] == "--auto-fill"
     assert flags["matching.default_mode"] == "--matching-default-mode"
     assert flags["totp.clipboard_clear_seconds"] == "--totp-clipboard-clear-seconds"
+    assert flags["matching.global_equivalent_domains"] == "--matching-global-equivalent-domains"

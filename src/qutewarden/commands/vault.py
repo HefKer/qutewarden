@@ -74,7 +74,7 @@ def _copy(ctx: Context, item: LoginItem, field: Field) -> None:
     if field is Field.USERNAME:
         value = item.username
     else:
-        secrets = ctx.backend.get_secrets(item.id)
+        secrets = flow.login_secrets(ctx, item)
         value = secrets.totp if field is Field.TOTP else secrets.password
     if not value:
         raise QutewardenError(f"{flow.describe(item)} has no {field.value}")

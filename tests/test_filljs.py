@@ -5,11 +5,18 @@ qutebrowser's ``jseval --world``: it shares the DOM with the page but not
 the page's JavaScript globals.
 """
 
+import dataclasses
 from pathlib import Path
 
 import pytest
 
-from qutewarden.filljs import render_fill_js, render_probe_js
+from qutewarden.filljs import (
+    render_card_fill_js,
+    render_fill_js,
+    render_identity_fill_js,
+    render_probe_js,
+)
+from qutewarden.model import CardSecrets, CustomField, FieldKind, IdentitySecrets
 
 pytestmark = pytest.mark.browser
 sync_api = pytest.importorskip("playwright.sync_api")
@@ -500,3 +507,447 @@ def test_origin_mismatch_fills_nothing(page, served_at):
     ))
     assert values(page, "username", "password") == {"username": "", "password": ""}
     assert page.evaluate("window.events") == []
+
+
+# --- Card items (#35) ---------------------------------------------------------
+
+CARD = CardSecrets(cardholder_name="Alice M Example", number="4242424242424242", brand="Visa",
+                   exp_month="3", exp_year="2030", code="QWSECRET-123")
+SHIPPING_IDS = ("first", "last", "email", "phone", "promo")
+
+
+def fill_card(page, card: CardSecrets = CARD, *, origin: str = ORIGIN) -> None:
+    run_isolated(page, render_card_fill_js(expected_origin=origin, card=card))
+
+
+def test_card_fields_are_found_by_autocomplete_with_a_single_expiry_field(page):
+    load(page, "checkout.html")
+    fill_card(page)
+    assert values(page, "cc-name", "cc-number", "cc-exp", "cc-csc") == {
+        "cc-name": "Alice M Example", "cc-number": "4242424242424242", "cc-exp": "03/30",
+        "cc-csc": "QWSECRET-123"}
+
+
+def test_a_card_fill_leaves_other_fields_alone_and_never_submits(page):
+    load(page, "checkout.html")
+    fill_card(page)
+    assert values(page, *SHIPPING_IDS) == dict.fromkeys(SHIPPING_IDS, "")
+    page.wait_for_timeout(100)
+    assert page.evaluate("window.submitted") == 0
+
+
+@pytest.mark.parametrize(("attribute", "value", "expiry"), [
+    ("maxlength", "7", "03/2030"),
+    ("placeholder", "MM/YYYY", "03/2030"),
+    ("placeholder", "e.g. 12/2031", "03/2030"),
+    ("pattern", r"\d{2}/\d{4}", "03/2030"),
+    ("pattern", r"\d{2}/\d{2}", "03/30"),
+])
+def test_a_single_expiry_field_gets_a_4_digit_year_only_when_it_asks_for_one(
+        page, attribute, value, expiry):
+    load(page, "checkout.html")
+    page.evaluate("""([attribute, value]) => {
+        const el = document.getElementById("cc-exp");
+        el.removeAttribute("maxlength");
+        el.removeAttribute("placeholder");
+        el.setAttribute(attribute, value);
+    }""", [attribute, value])
+    fill_card(page)
+    assert values(page, "cc-exp") == {"cc-exp": expiry}
+
+
+def test_split_card_fields_are_filled_separately(page):
+    load(page, "checkout_split.html")
+    fill_card(page)
+    ids = ("cc-given-name", "cc-family-name", "cc-number", "cc-exp-month", "cc-exp-year",
+           "cc-exp-year-4", "cc-csc", "cc-type")
+    assert values(page, *ids) == {
+        "cc-given-name": "Alice M", "cc-family-name": "Example", "cc-number": "4242424242424242",
+        "cc-exp-month": "03", "cc-exp-year": "30", "cc-exp-year-4": "2030",
+        "cc-csc": "QWSECRET-123", "cc-type": "Visa"}
+
+
+def test_selects_take_the_option_whose_value_or_text_matches(page):
+    load(page, "checkout_selects.html")
+    fill_card(page)
+    assert values(page, "cc-name", "cc-type", "cc-number", "cc-exp-month", "cc-exp-year") == {
+        "cc-name": "Alice M Example", "cc-type": "VI", "cc-number": "4242424242424242",
+        "cc-exp-month": "3", "cc-exp-year": "30"}
+    assert ["cc-exp-month", "change"] in page.evaluate("window.events")
+
+
+def test_a_select_without_a_matching_option_is_left_alone(page):
+    load(page, "checkout_selects.html")
+    fill_card(page, dataclasses.replace(CARD, brand="Discover", exp_year="2031"))
+    assert values(page, "cc-type", "cc-exp-year", "cc-exp-month") == {
+        "cc-type": "", "cc-exp-year": "", "cc-exp-month": "3"}
+
+
+def test_card_fields_without_autocomplete_are_found_by_name_id_label_and_placeholder(page):
+    load(page, "checkout_plain.html")
+    fill_card(page)
+    assert values(page, "holder", "cardnumber", "expiry", "cvc") == {
+        "holder": "Alice M Example", "cardnumber": "4242424242424242", "expiry": "03/2030",
+        "cvc": "QWSECRET-123"}
+    assert values(page, "fname", "phone", "promo") == {"fname": "", "phone": "", "promo": ""}
+
+
+def test_fields_the_card_has_no_value_for_are_left_alone(page):
+    load(page, "checkout.html")
+    page.fill("#cc-exp", "12/29")
+    page.fill("#cc-csc", "999")
+    fill_card(page, CardSecrets(number="4242424242424242", exp_month="13", exp_year="2030"))
+    assert values(page, "cc-name", "cc-number", "cc-exp", "cc-csc") == {
+        "cc-name": "", "cc-number": "4242424242424242", "cc-exp": "12/29", "cc-csc": "999"}
+
+
+def test_the_focused_fields_form_is_the_card_fill_scope(page):
+    load(page, "checkout.html")
+    page.evaluate("""() => document.body.insertAdjacentHTML("afterbegin",
+        '<form id="other"><input id="other-number" autocomplete="cc-number"></form>')""")
+    page.focus("#cc-csc")
+    fill_card(page)
+    assert values(page, "other-number", "cc-number") == {
+        "other-number": "", "cc-number": "4242424242424242"}
+
+
+def test_a_card_fill_on_another_origin_fills_nothing(page):
+    load(page, "checkout.html", origin="https://evil.example.test")
+    fill_card(page)
+    assert values(page, "cc-name", "cc-number", "cc-csc") == {
+        "cc-name": "", "cc-number": "", "cc-csc": ""}
+
+
+# Same-origin iframes (spec-v2 "Iframes")
+
+OTHER_ORIGIN = "https://sso.other.test"
+
+
+HOST_FORM = """<form><input type="text" name="login" id="host-user">
+<input type="password" name="password" id="host-password"></form>"""
+
+
+def load_with_frame(page, frame_url: str, *, host_form: bool = False):
+    """Open a page at ORIGIN with an iframe showing login_single.html at ``frame_url``.
+
+    With ``host_form`` the page itself also has a login form, before the iframe.
+    """
+    body = (PAGES / "login_single.html").read_text()
+    host = (f'<!doctype html><title>Host</title>{HOST_FORM if host_form else ""}'
+            f'<iframe id="frame" src="{frame_url}"></iframe>')
+    for origin in (ORIGIN, OTHER_ORIGIN):
+        page.route(f"{origin}/frame", lambda route: route.fulfill(
+            body=body, content_type="text/html"))
+    page.route(f"{ORIGIN}/", lambda route: route.fulfill(body=host, content_type="text/html"))
+    page.goto(f"{ORIGIN}/")
+    page.frame_locator("#frame").locator("#password").wait_for(state="attached")
+    frame = page.frame(url=frame_url)
+    assert frame is not None
+    return frame
+
+
+def frame_values(frame, *ids: str) -> dict[str, str]:
+    return {i: frame.eval_on_selector(f"#{i}", "el => el.value") for i in ids}
+
+
+def test_login_form_in_a_same_origin_iframe_fills(page):
+    frame = load_with_frame(page, f"{ORIGIN}/frame")
+    run_isolated(page, render_fill_js(
+        expected_origin=ORIGIN, mode="login", username="alice", password="QWSECRET-pw",
+    ))
+    assert frame_values(frame, "username", "password") == {
+        "username": "alice", "password": "QWSECRET-pw"}
+    assert frame.evaluate("window.events") == [
+        ["username", "input"], ["username", "change"],
+        ["password", "input"], ["password", "change"],
+    ]
+
+
+@pytest.mark.parametrize("focus_frame", [False, True])
+def test_focused_iframe_input_beats_the_pages_own_form(page, focus_frame):
+    frame = load_with_frame(page, f"{ORIGIN}/frame", host_form=True)
+    if focus_frame:
+        frame.focus("#password")
+    run_isolated(page, render_fill_js(
+        expected_origin=ORIGIN, mode="login", username="alice", password="QWSECRET-pw",
+    ))
+    in_frame = frame_values(frame, "username", "password")
+    in_host = values(page, "host-user", "host-password")
+    filled = {"username": "alice", "password": "QWSECRET-pw"}
+    empty = {"username": "", "password": ""}
+    assert (in_frame, list(in_host.values())) == (
+        (filled, ["", ""]) if focus_frame else (empty, ["alice", "QWSECRET-pw"]))
+
+
+@pytest.mark.parametrize("expected_origin", [ORIGIN, OTHER_ORIGIN])
+def test_login_form_in_a_cross_origin_iframe_is_left_alone(page, expected_origin):
+    frame = load_with_frame(page, f"{OTHER_ORIGIN}/frame")
+    run_isolated(page, render_fill_js(
+        expected_origin=expected_origin, mode="login", username="alice",
+        password="QWSECRET-pw", submit=True,
+    ))
+    assert frame_values(frame, "username", "password") == {"username": "", "password": ""}
+    assert frame.evaluate("[window.events, window.submitted]") == [[], 0]
+
+
+def test_same_origin_iframe_that_navigated_elsewhere_is_left_alone(page):
+    load_with_frame(page, f"{ORIGIN}/frame")
+    with page.expect_event(
+        "framenavigated", lambda f: f.url == f"{OTHER_ORIGIN}/frame"
+    ) as navigated:
+        page.eval_on_selector("#frame", f"el => {{ el.src = '{OTHER_ORIGIN}/frame'; }}")
+    frame = navigated.value
+    frame.wait_for_load_state()
+    run_isolated(page, render_fill_js(
+        expected_origin=ORIGIN, mode="login", username="alice", password="QWSECRET-pw",
+    ))
+    assert frame_values(frame, "username", "password") == {"username": "", "password": ""}
+    assert frame.evaluate("window.events") == []
+
+
+@pytest.mark.parametrize(("frame_origin", "filled"), [(ORIGIN, True), (OTHER_ORIGIN, False)])
+def test_a_card_form_in_an_iframe_is_filled_only_from_the_same_origin(
+        page, frame_origin, filled):
+    body = (PAGES / "checkout_selects.html").read_text()
+    page.route(f"{frame_origin}/frame", lambda route: route.fulfill(
+        body=body, content_type="text/html"))
+    page.route(f"{ORIGIN}/", lambda route: route.fulfill(
+        body=f'<!doctype html><iframe id="frame" src="{frame_origin}/frame"></iframe>',
+        content_type="text/html"))
+    page.goto(f"{ORIGIN}/")
+    page.frame_locator("#frame").locator("#cc-number").wait_for(state="attached")
+    frame = page.frame(url=f"{frame_origin}/frame")
+    assert frame is not None
+    fill_card(page)
+    expected = {"cc-number": "4242424242424242", "cc-exp-month": "3", "cc-type": "VI"}
+    assert frame_values(frame, *expected) == (
+        expected if filled else dict.fromkeys(expected, ""))
+
+
+# --- Identity items (#36) -----------------------------------------------------
+
+IDENTITY = IdentitySecrets(
+    title="Dr", first_name="Alice", middle_name="M", last_name="Example", company="Example Inc",
+    address1="1 Main St", address2="Apt 2", city="Springfield", state="IL", postal_code="62701",
+    country="US", phone="555-0100", email="alice@example.com", ssn="000-00-0000",
+    username="alice")
+ADDRESS_IDS = ("title", "given-name", "additional-name", "family-name", "organization",
+               "address-line1", "address-line2", "address-level2", "address-level1",
+               "postal-code", "country", "email", "tel", "username")
+
+
+def fill_identity(page, identity: IdentitySecrets = IDENTITY, *, origin: str = ORIGIN) -> None:
+    run_isolated(page, render_identity_fill_js(expected_origin=origin, identity=identity))
+
+
+def test_identity_fields_are_found_by_autocomplete(page):
+    load(page, "address.html")
+    fill_identity(page)
+    assert values(page, *ADDRESS_IDS) == {
+        "title": "Dr", "given-name": "Alice", "additional-name": "M", "family-name": "Example",
+        "organization": "Example Inc", "address-line1": "1 Main St", "address-line2": "Apt 2",
+        "address-level2": "Springfield", "address-level1": "IL", "postal-code": "62701",
+        "country": "US", "email": "alice@example.com", "tel": "555-0100", "username": "alice"}
+    assert ["country", "change"] in page.evaluate("window.events")
+
+
+def test_an_identity_fill_leaves_other_fields_alone_and_never_submits(page):
+    load(page, "address.html")
+    fill_identity(page)
+    assert values(page, "cc-number", "gift") == {"cc-number": "", "gift": ""}
+    page.wait_for_timeout(100)
+    assert page.evaluate("window.submitted") == 0
+
+
+def test_a_street_address_field_gets_every_address_line(page):
+    load(page, "address.html")
+    page.evaluate("""() => {
+        document.getElementById("address-line1").setAttribute("autocomplete", "street-address");
+        document.getElementById("address-line2").remove();
+    }""")
+    fill_identity(page)
+    assert values(page, "address-line1") == {"address-line1": "1 Main St, Apt 2"}
+
+
+def test_identity_fields_without_autocomplete_are_found_by_name_id_label_and_placeholder(page):
+    load(page, "address_plain.html")
+    fill_identity(page, dataclasses.replace(IDENTITY, country="United States"))
+    assert values(page, "fname", "lname", "org", "street", "apt", "town", "region", "zip",
+                  "land", "mail", "phone") == {
+        "fname": "Alice", "lname": "Example", "org": "Example Inc", "street": "1 Main St",
+        "apt": "Apt 2", "town": "Springfield", "region": "IL", "zip": "62701", "land": "us",
+        "mail": "alice@example.com", "phone": "555-0100"}
+    assert values(page, "gift") == {"gift": ""}
+
+
+def test_a_country_select_without_a_matching_option_is_left_alone(page):
+    load(page, "address.html")
+    fill_identity(page, dataclasses.replace(IDENTITY, country="Narnia"))
+    assert values(page, "country", "postal-code") == {"country": "", "postal-code": "62701"}
+
+
+def test_fields_the_identity_has_no_value_for_are_left_alone(page):
+    load(page, "address.html")
+    page.fill("#organization", "Typed Ltd")
+    fill_identity(page, IdentitySecrets(first_name="Alice"))
+    assert values(page, "given-name", "family-name", "organization", "country") == {
+        "given-name": "Alice", "family-name": "", "organization": "Typed Ltd", "country": ""}
+
+
+def test_the_focused_fields_form_is_the_identity_fill_scope(page):
+    load(page, "address.html")
+    page.evaluate("""() => document.body.insertAdjacentHTML("afterbegin",
+        '<form id="other"><input id="other-email" autocomplete="email"></form>')""")
+    page.focus("#postal-code")
+    fill_identity(page)
+    assert values(page, "other-email", "email") == {
+        "other-email": "", "email": "alice@example.com"}
+
+
+def test_an_identity_fill_on_another_origin_fills_nothing(page):
+    load(page, "address.html", origin="https://evil.example.test")
+    fill_identity(page)
+    assert values(page, "given-name", "email") == {"given-name": "", "email": ""}
+
+
+# --- Custom fields (#37) --------------------------------------------------------
+
+def text(name: str, value: str) -> CustomField:
+    return CustomField(name, FieldKind.TEXT, value)
+
+
+def checked(page, *ids: str) -> dict[str, bool]:
+    return {i: page.eval_on_selector(f"#{i}", "el => el.checked") for i in ids}
+
+
+def fill_login(page, *fields: CustomField, submit: bool = False):
+    run_isolated(page, render_fill_js(
+        expected_origin=ORIGIN, mode="auto", username="alice", password="QWSECRET-pw",
+        submit=submit, fields=fields))
+
+
+def test_custom_fields_match_name_id_label_aria_label_and_placeholder(page):
+    load(page, "login_custom.html")
+    fill_login(page, text("team", "core"),
+               CustomField("member-id", FieldKind.HIDDEN, "QWSECRET-member"),
+               CustomField("  BACKUP CODE ", FieldKind.HIDDEN, "QWSECRET-backup"),
+               text("customer number", "c-42"),
+               CustomField("Branch", FieldKind.LINKED, "alice"))
+    assert values(page, "team", "Member-ID", "backup", "customer", "branch", "other") == {
+        "team": "core", "Member-ID": "QWSECRET-member", "backup": "QWSECRET-backup",
+        "customer": "c-42", "branch": "alice", "other": ""}
+    assert ["team", "input"] in page.evaluate("window.events")
+
+
+def test_boolean_custom_fields_turn_checkboxes_and_radio_buttons_on_and_off(page):
+    load(page, "login_custom.html")
+    fill_login(page, CustomField("remember", FieldKind.BOOLEAN, "true"),
+               CustomField("Terms", FieldKind.BOOLEAN, "false"),
+               CustomField("plan-pro", FieldKind.BOOLEAN, "true"))
+    assert checked(page, "remember", "terms", "plan-pro", "plan-free") == {
+        "remember": True, "terms": False, "plan-pro": True, "plan-free": False}
+    assert ["remember", "change"] in page.evaluate("window.events")
+
+
+def test_a_custom_field_never_overrides_what_the_built_in_fill_filled(page):
+    load(page, "login_custom.html")
+    fill_login(page, text("login", "QWSECRET-not-the-username"),
+               CustomField("Password", FieldKind.HIDDEN, "QWSECRET-not-the-password"))
+    assert values(page, "username", "password") == {
+        "username": "alice", "password": "QWSECRET-pw"}
+
+
+def test_a_boolean_custom_field_never_sets_a_text_input_nor_text_a_checkbox(page):
+    load(page, "login_custom.html")
+    fill_login(page, CustomField("team", FieldKind.BOOLEAN, "true"), text("remember", "x"))
+    assert values(page, "team", "remember") == {"team": "", "remember": "on"}
+    assert checked(page, "remember") == {"remember": False}
+
+
+def test_custom_fields_that_match_nothing_are_skipped(page):
+    load(page, "login_custom.html")
+    fill_login(page, text("no such field", "QWSECRET-x"), text("team", "core"))
+    assert values(page, "username", "team", "other") == {
+        "username": "alice", "team": "core", "other": ""}
+
+
+def test_custom_fields_are_filled_before_the_form_is_submitted(page):
+    load(page, "login_custom.html")
+    fill_login(page, text("team", "core"), submit=True)
+    page.wait_for_function("window.submitted === 1")
+    assert page.evaluate("window.submittedTeam") == "core"
+
+
+def test_custom_fields_fill_on_a_page_without_login_fields(page):
+    load(page, "login_custom.html")
+    page.evaluate("""() => { document.getElementById("username").remove();
+                             document.getElementById("password").remove(); }""")
+    fill_login(page, text("branch", "QWSECRET-branch"), submit=True)
+    assert values(page, "branch", "team") == {"branch": "QWSECRET-branch", "team": ""}
+    page.wait_for_timeout(100)
+    assert page.evaluate("window.submitted") == 0  # only a built-in fill submits
+
+
+OTHER_FORM = """() => document.body.insertAdjacentHTML("afterbegin",
+    '<form id="newsletter"><input type="text" name="team" id="team-b">'
+    + '<input type="text" name="branch" id="branch-b"></form>')"""
+
+
+def test_custom_fields_fill_only_the_form_the_built_in_fill_filled(page):
+    load(page, "login_custom.html")
+    page.evaluate(OTHER_FORM)
+    page.focus("#username")
+    fill_login(page, text("team", "core"))
+    assert values(page, "username", "team", "team-b") == {
+        "username": "alice", "team": "core", "team-b": ""}
+
+
+def test_custom_fields_stay_in_the_focused_inputs_form_when_the_built_in_fill_fills_nothing(
+        page):
+    load(page, "login_custom.html")
+    page.evaluate(OTHER_FORM)
+    page.evaluate("""() => { document.getElementById("username").remove();
+                             document.getElementById("password").remove(); }""")
+    page.focus("#team")
+    run_isolated(page, render_fill_js(expected_origin=ORIGIN, mode="auto", username=None,
+                                      password="QWSECRET-pw", fields=(text("branch", "b-1"),)))
+    assert values(page, "branch", "branch-b") == {"branch": "b-1", "branch-b": ""}
+
+
+def test_a_card_fill_also_fills_the_cards_custom_fields(page):
+    load(page, "checkout.html")
+    fill_card(page, dataclasses.replace(CARD, fields=(
+        text("promo", "QWSECRET-promo"), text("cc-number", "QWSECRET-not-the-number"))))
+    assert values(page, "promo", "cc-number") == {
+        "promo": "QWSECRET-promo", "cc-number": "4242424242424242"}
+
+
+def test_an_identity_fill_also_fills_the_identitys_custom_fields(page):
+    load(page, "address.html")
+    fill_identity(page, dataclasses.replace(IDENTITY, fields=(
+        CustomField("Gift message", FieldKind.HIDDEN, "QWSECRET-gift"),
+        text("email", "QWSECRET-not-the-email"))))
+    assert values(page, "gift", "email") == {
+        "gift": "QWSECRET-gift", "email": "alice@example.com"}
+
+
+def test_custom_fields_on_another_origin_fill_nothing(page):
+    load(page, "login_custom.html", origin="https://evil.example.test")
+    fill_login(page, text("team", "core"))
+    assert values(page, "team") == {"team": ""}
+
+
+@pytest.mark.parametrize("focus_frame", [False, True])
+def test_custom_fields_fill_only_the_document_the_built_in_fill_chose(page, focus_frame):
+    frame = load_with_frame(page, f"{ORIGIN}/frame", host_form=True)
+    page.evaluate("""() => document.querySelector("form").insertAdjacentHTML(
+        "beforeend", '<input type="text" name="q" id="host-q">')""")
+    frame.evaluate("""() => document.getElementById("login").insertAdjacentHTML(
+        "beforeend", '<input type="text" name="q" id="frame-q">')""")
+    if focus_frame:
+        frame.focus("#password")
+    fill_login(page, text("q", "QWSECRET-q"))
+    in_frame = frame_values(frame, "frame-q")["frame-q"]
+    in_host = values(page, "host-q")["host-q"]
+    assert (in_frame, in_host) == (
+        ("QWSECRET-q", "") if focus_frame else ("", "QWSECRET-q"))

@@ -5,11 +5,34 @@ on:
     branches: [main]
   pull_request:
 
+# Runners are pinned rather than ubuntu-latest, which moves to Ubuntu 26 on
+# 2026-10-19. 24.04 is the image the e2e job's AppArmor userns sysctl is known
+# to pass on; bump both jobs together once e2e is shown to pass on a newer one.
 jobs:
   check:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: cachix/install-nix-action@v31
       - run: nix develop -c scripts/check
       - run: nix build
+      - run: nix flake check
+
+  e2e:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: cachix/install-nix-action@v31
+      # Chromium's sandbox needs unprivileged user namespaces, which Ubuntu
+      # restricts. If lifting that ever stops working, set QW_E2E_NO_SANDBOX=1
+      # (qt.chromium.sandboxing = disable-all, CI only).
+      - run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - run: nix develop -c scripts/check --e2e -m e2e
+        env:
+          QW_E2E_KEEP: "1"  # keep the session root for the logs below
+      - if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-logs
+          path: /tmp/qw*/*.log
+          if-no-files-found: ignore

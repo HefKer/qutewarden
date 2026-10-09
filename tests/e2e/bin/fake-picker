@@ -1,0 +1,37 @@
+#!/usr/bin/env python3
+"""Scripted dmenu-style picker for the e2e suite (harness.Picker drives it).
+
+Writes its argv and stdin lines to $QW_E2E_PICKER_DIR/request-N.json, then
+waits for answer-N.json: {"line": <text>} prints that line, {"line": null}
+cancels (exit 1). Cancels by itself if no answer comes within 60 s.
+"""
+
+import json
+import os
+import sys
+import time
+from pathlib import Path
+
+DIR = Path(os.environ["QW_E2E_PICKER_DIR"])
+lines = sys.stdin.read().splitlines()
+number = 1
+while True:
+    try:
+        fd = os.open(DIR / f"request-{number}.lock", os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        break
+    except FileExistsError:
+        number += 1
+os.close(fd)
+tmp = DIR / f".request-{number}"
+tmp.write_text(json.dumps({"argv": sys.argv[1:], "lines": lines}))
+tmp.rename(DIR / f"request-{number}.json")
+answer_path = DIR / f"answer-{number}.json"
+deadline = time.monotonic() + 60
+while not answer_path.exists():
+    if time.monotonic() > deadline:
+        sys.exit(1)
+    time.sleep(0.02)
+line = json.loads(answer_path.read_text())["line"]
+if line is None:
+    sys.exit(1)
+print(line)

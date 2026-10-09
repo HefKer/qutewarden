@@ -10,13 +10,24 @@ from qutewarden.backend.base import (
     SaveFailed,
 )
 from qutewarden.backend.fake import (
+    FAKE_CARDS,
+    FAKE_IDENTITIES,
     FAKE_ITEMS,
     SECRET_MARKER,
     FakeBackend,
+    fake_fields,
     fake_password,
     fake_totp,
 )
-from qutewarden.model import LoginItem, MatchMode, Secrets, Status
+from qutewarden.model import (
+    CardSecrets,
+    IdentityItem,
+    IdentitySecrets,
+    LoginItem,
+    LoginSecrets,
+    MatchMode,
+    Status,
+)
 
 
 def test_fake_is_a_backend_named_fake():
@@ -49,7 +60,7 @@ def test_default_items_give_the_documented_candidates(tmp_path, page_url, expect
     from qutewarden.match import candidates, make_suffix_extractor
     found = candidates(FAKE_ITEMS, page_url, default_mode=MatchMode.BASE_DOMAIN,
                        extractor=make_suffix_extractor(tmp_path, offline=True))
-    assert [item.id for item in found] == expected
+    assert [c.item.id for c in found] == expected
 
 
 def test_list_logins_returns_items_without_secrets():
@@ -58,14 +69,47 @@ def test_list_logins_returns_items_without_secrets():
 
 def test_get_secrets_returns_password_and_totp_code():
     secrets = FakeBackend().get_secrets("github")
-    assert secrets == Secrets(password=fake_password("github"), totp=fake_totp("github"))
+    assert secrets == LoginSecrets(password=fake_password("github"), totp=fake_totp("github"),
+                                   fields=fake_fields("github"))
 
 
 def test_get_secrets_without_totp_and_unknown_item():
     backend = FakeBackend()
-    assert backend.get_secrets("no-totp").totp is None
+    assert backend.get_secrets("no-totp") == LoginSecrets(password=fake_password("no-totp"),
+                                                          fields=fake_fields("no-totp"))
     with pytest.raises(ItemNotFound):
         backend.get_secrets("missing")
+
+
+def test_list_cards_shows_brand_and_last_4_digits_only():
+    cards = FakeBackend().list_cards()
+    assert cards == list(FAKE_CARDS)
+    assert all(SECRET_MARKER not in repr(card) for card in cards)
+    assert {card.id for card in cards if card.reprompt} == {"reprompt-card"}
+
+
+def test_get_secrets_of_a_card_item_returns_card_values_with_the_marker():
+    secrets = FakeBackend().get_secrets("visa")
+    assert isinstance(secrets, CardSecrets)
+    assert secrets.number == f"{SECRET_MARKER}-4242424242424242"
+    assert secrets.code is not None and SECRET_MARKER in secrets.code
+    assert (secrets.exp_month, secrets.exp_year) == ("3", "2030")
+    assert SECRET_MARKER not in repr(secrets)
+
+
+def test_list_identities_shows_names_only():
+    identities = FakeBackend().list_identities()
+    assert identities == list(FAKE_IDENTITIES)
+    assert all(isinstance(identity, IdentityItem) for identity in identities)
+    assert {identity.id for identity in identities if identity.reprompt} == {"reprompt-identity"}
+
+
+def test_get_secrets_of_an_identity_item_returns_values_that_all_carry_the_marker():
+    secrets = FakeBackend().get_secrets("me")
+    assert isinstance(secrets, IdentitySecrets)
+    assert secrets.first_name == f"{SECRET_MARKER}-Alice"
+    assert secrets.country == f"{SECRET_MARKER}-US"
+    assert SECRET_MARKER not in repr(secrets)
 
 
 def test_locked_fake_must_be_unlocked_before_reading():

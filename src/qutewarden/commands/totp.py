@@ -21,7 +21,7 @@ def run(ctx: Context, args: argparse.Namespace) -> int:
     no_totp = QutewardenError(f"{flow.describe(item)} has no TOTP")
     if not item.has_totp:
         raise no_totp
-    code = ctx.backend.get_secrets(item.id).totp
+    code = flow.login_secrets(ctx, item).totp
     if not code:
         raise no_totp
     if copy:

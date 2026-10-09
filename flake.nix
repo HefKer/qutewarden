@@ -1,10 +1,21 @@
 {
   description = "qutewarden: Bitwarden (rbw) userscript for qutebrowser";
 
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    # Only for the flake check that evaluates the home-manager module.
+    home-manager = {
+      url = "github:nix-community/home-manager";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+  };
 
   outputs =
-    { self, nixpkgs }:
+    {
+      self,
+      nixpkgs,
+      home-manager,
+    }:
     let
       systems = [
         "x86_64-linux"
@@ -33,9 +44,13 @@
           ];
 
           nativeCheckInputs = [ pkgs.python3Packages.pytestCheckHook ];
-          # Browser tests need Chromium; the packaging test builds a wheel itself.
+          # Browser tests need Chromium; the packaging test builds a wheel itself;
+          # the e2e suite (ADR-0007) needs the dev shell.
           disabledTestMarks = [ "browser" ];
-          disabledTestPaths = [ "tests/test_packaging.py" ];
+          disabledTestPaths = [
+            "tests/test_packaging.py"
+            "tests/e2e"
+          ];
           pythonImportsCheck = [ "qutewarden" ];
 
           # The clipboard clearer is started as `sys.executable -m
@@ -63,6 +78,16 @@
         default = self.packages.${pkgs.stdenv.hostPlatform.system}.qutewarden;
       });
 
+      homeManagerModules.default = import ./nix/hm-module.nix self;
+
+      checks = forAllSystems (pkgs: {
+        hm-module = import ./nix/hm-module-check.nix {
+          inherit pkgs home-manager;
+          module = self.homeManagerModules.default;
+          package = self.packages.${pkgs.stdenv.hostPlatform.system}.default;
+        };
+      });
+
       devShells = forAllSystems (pkgs: {
         default = pkgs.mkShell {
           packages = [
@@ -71,8 +96,17 @@
               p.tldextract
               p.playwright
               p.hatchling
+              # e2e seed script: Bitwarden's client-side crypto (ADR-0007).
+              p.cryptography
             ]))
             pkgs.rbw
+            # e2e suite (ADR-0007): real browser, server and clipboards.
+            pkgs.qutebrowser
+            pkgs.vaultwarden
+            pkgs.sway
+            pkgs.wl-clipboard
+            pkgs.xorg-server
+            pkgs.xclip
             pkgs.ruff
             pkgs.pyright
             # Runs qutewarden from this checkout's src/, against your real rbw.

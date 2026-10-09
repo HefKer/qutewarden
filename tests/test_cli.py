@@ -13,7 +13,8 @@ from qutewarden.match import make_suffix_extractor
 from qutewarden.model import MatchMode
 from qutewarden.qute import Qute
 
-SUBCOMMANDS = ["fill", "totp", "generate", "vault", "unlock", "lock", "sync", "status"]
+SUBCOMMANDS = ["fill", "totp", "generate", "vault", "card", "identity", "unlock", "lock", "sync",
+               "status"]
 
 
 @pytest.fixture
@@ -137,6 +138,20 @@ def test_every_setting_has_a_flag_on_every_subcommand(environ):
         assert rec.config.totp_clipboard is True
         assert rec.config.vault_copy_clear_seconds == 5
         assert rec.config.insert_mode_after_fill is False
+
+
+def test_global_equivalent_domains_can_be_turned_off_by_flag(environ):
+    rec = Recorder()
+    cli.main(["fill", "--no-matching-global-equivalent-domains"], environ=environ,
+             make_context=rec)
+    assert rec.config.matching_global_equivalent_domains is False
+
+
+def test_user_equivalent_domains_have_no_flag(environ):
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["fill", "--matching-equivalent-domains", "a.test"], environ=environ,
+                 make_context=Recorder())
+    assert exc.value.code == 2
 
 
 def test_config_flag_selects_another_file(environ, tmp_path):

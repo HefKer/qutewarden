@@ -1,0 +1,19 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Checkout (no autocomplete)</title></head>
+<body>
+  <!-- No autocomplete attributes: fields are found by name, id, label and placeholder. -->
+  <div id="shipping">
+    <label for="fname">First name</label> <input type="text" id="fname" name="fname">
+    <label for="phone">Phone number</label> <input type="tel" id="phone" name="phone">
+    <input type="text" id="promo" name="promo" placeholder="Promo code">
+  </div>
+  <div id="payment">
+    <label for="holder">Name on card</label> <input type="text" id="holder" name="holder" autocomplete="off">
+    <input type="text" id="cardnumber" name="cardnumber" autocomplete="off">
+    <label>Expiration date <input type="text" id="expiry" name="expiry" placeholder="MM / YYYY"></label>
+    <input type="text" id="cvc" name="cvc" placeholder="CVC">
+    <button type="button" id="pay">Pay</button>
+  </div>
+</body>
+</html>
