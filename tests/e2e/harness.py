@@ -618,13 +618,18 @@ class Qutebrowser:
                                           cwd=self.basedir, stdin=subprocess.DEVNULL,
                                           stdout=log, stderr=subprocess.STDOUT,
                                           start_new_session=True)
-        self.socket_path = wait_for(self._ipc_socket, "qutebrowser's IPC socket", 60)
-        wait_for(lambda: any("Init done" in e.message for e in self.log()),
-                 "qutebrowser to finish starting", 60)
+        try:
+            self.socket_path = wait_for(self._ipc_socket, "qutebrowser's IPC socket", 60)
+            wait_for(lambda: self._ipc_socket() and any("Init done" in e.message
+                                                        for e in self.log()),
+                     "qutebrowser to finish starting", 60)
+        except HarnessError as e:
+            stop_process(self._proc)
+            raise HarnessError(f"{e}; qutebrowser's log:\n{_tail(self.log_path)}") from None
 
     def _ipc_socket(self) -> Path | None:
         if self._proc.poll() is not None:
-            raise HarnessError(f"qutebrowser exited; see {self.log_path}")
+            raise HarnessError(f"qutebrowser exited with code {self._proc.returncode}")
         found = [p for p in (self.basedir / "runtime").glob("ipc-*") if p.is_socket()]
         return found[0] if found else None
 
