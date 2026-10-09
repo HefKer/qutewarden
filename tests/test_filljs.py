@@ -500,3 +500,90 @@ def test_origin_mismatch_fills_nothing(page, served_at):
     ))
     assert values(page, "username", "password") == {"username": "", "password": ""}
     assert page.evaluate("window.events") == []
+
+
+# Same-origin iframes (spec-v2 "Iframes")
+
+OTHER_ORIGIN = "https://sso.other.test"
+
+
+HOST_FORM = """<form><input type="text" name="login" id="host-user">
+<input type="password" name="password" id="host-password"></form>"""
+
+
+def load_with_frame(page, frame_url: str, *, host_form: bool = False):
+    """Open a page at ORIGIN with an iframe showing login_single.html at ``frame_url``.
+
+    With ``host_form`` the page itself also has a login form, before the iframe.
+    """
+    body = (PAGES / "login_single.html").read_text()
+    host = (f'<!doctype html><title>Host</title>{HOST_FORM if host_form else ""}'
+            f'<iframe id="frame" src="{frame_url}"></iframe>')
+    for origin in (ORIGIN, OTHER_ORIGIN):
+        page.route(f"{origin}/frame", lambda route: route.fulfill(
+            body=body, content_type="text/html"))
+    page.route(f"{ORIGIN}/", lambda route: route.fulfill(body=host, content_type="text/html"))
+    page.goto(f"{ORIGIN}/")
+    page.frame_locator("#frame").locator("#password").wait_for(state="attached")
+    frame = page.frame(url=frame_url)
+    assert frame is not None
+    return frame
+
+
+def frame_values(frame, *ids: str) -> dict[str, str]:
+    return {i: frame.eval_on_selector(f"#{i}", "el => el.value") for i in ids}
+
+
+def test_login_form_in_a_same_origin_iframe_fills(page):
+    frame = load_with_frame(page, f"{ORIGIN}/frame")
+    run_isolated(page, render_fill_js(
+        expected_origin=ORIGIN, mode="login", username="alice", password="QWSECRET-pw",
+    ))
+    assert frame_values(frame, "username", "password") == {
+        "username": "alice", "password": "QWSECRET-pw"}
+    assert frame.evaluate("window.events") == [
+        ["username", "input"], ["username", "change"],
+        ["password", "input"], ["password", "change"],
+    ]
+
+
+@pytest.mark.parametrize("focus_frame", [False, True])
+def test_focused_iframe_input_beats_the_pages_own_form(page, focus_frame):
+    frame = load_with_frame(page, f"{ORIGIN}/frame", host_form=True)
+    if focus_frame:
+        frame.focus("#password")
+    run_isolated(page, render_fill_js(
+        expected_origin=ORIGIN, mode="login", username="alice", password="QWSECRET-pw",
+    ))
+    in_frame = frame_values(frame, "username", "password")
+    in_host = values(page, "host-user", "host-password")
+    filled = {"username": "alice", "password": "QWSECRET-pw"}
+    empty = {"username": "", "password": ""}
+    assert (in_frame, list(in_host.values())) == (
+        (filled, ["", ""]) if focus_frame else (empty, ["alice", "QWSECRET-pw"]))
+
+
+@pytest.mark.parametrize("expected_origin", [ORIGIN, OTHER_ORIGIN])
+def test_login_form_in_a_cross_origin_iframe_is_left_alone(page, expected_origin):
+    frame = load_with_frame(page, f"{OTHER_ORIGIN}/frame")
+    run_isolated(page, render_fill_js(
+        expected_origin=expected_origin, mode="login", username="alice",
+        password="QWSECRET-pw", submit=True,
+    ))
+    assert frame_values(frame, "username", "password") == {"username": "", "password": ""}
+    assert frame.evaluate("[window.events, window.submitted]") == [[], 0]
+
+
+def test_same_origin_iframe_that_navigated_elsewhere_is_left_alone(page):
+    load_with_frame(page, f"{ORIGIN}/frame")
+    with page.expect_event(
+        "framenavigated", lambda f: f.url == f"{OTHER_ORIGIN}/frame"
+    ) as navigated:
+        page.eval_on_selector("#frame", f"el => {{ el.src = '{OTHER_ORIGIN}/frame'; }}")
+    frame = navigated.value
+    frame.wait_for_load_state()
+    run_isolated(page, render_fill_js(
+        expected_origin=ORIGIN, mode="login", username="alice", password="QWSECRET-pw",
+    ))
+    assert frame_values(frame, "username", "password") == {"username": "", "password": ""}
+    assert frame.evaluate("window.events") == []

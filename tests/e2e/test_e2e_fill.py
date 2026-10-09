@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from e2e.harness import PageServer, Picker, Pinentry, Qutebrowser, totp_codes, wait_for
+from e2e.harness import Page, PageServer, Picker, Pinentry, Qutebrowser, totp_codes, wait_for
 from e2e.items import Login, Markers, SeededVault
 
 pytestmark = pytest.mark.e2e
@@ -108,6 +108,20 @@ def test_auto_fill_with_one_candidate_skips_the_picker(
     fields = page.wait_fields(_filled, "the fill")
     assert (fields["username"], fields["password"]) == ("sam", vault.single.password)
     assert picker.pending() == []
+
+
+def test_fill_reaches_a_login_form_in_a_same_origin_iframe(
+        qb: Qutebrowser, pages: PageServer, vault: SeededVault, unlocked: None):
+    frame_url = "http://single.test/frame/login_single.html"
+    known = pages.loads()
+    qb.open(pages, "http://single.test/login_iframe.html")
+    [load] = wait_for(lambda: [ld for ld in pages.loads() - known
+                               if pages.latest(ld).href == frame_url], "the iframe to load")
+    frame = Page(pages, load, frame_url)
+    run = qb.run("fill", "--auto-fill")
+    fields = frame.wait_fields(_filled, "the iframe's password to be filled")
+    assert (fields["username"], fields["password"]) == ("sam", vault.single.password)
+    assert run.messages() == [("INFO", "qutewarden: filling Single S (sam)")]
 
 
 def test_submit_after_fill_submits_the_form(

@@ -186,7 +186,7 @@ The no-leak test runs every subcommand against a fake vault and fails if a place
 
 Limits:
 
-- **No iframes.** `jseval` only runs in the top-level frame, so login forms inside iframes (some SSO and payment pages) can't be filled.
+- **Only same-origin iframes.** Login forms inside an iframe are filled when the iframe has the page's origin. Iframes from another origin (some SSO and payment pages) can't be reached from the page and are left alone.
 - **Clipboard opt-ins are a real Leak path.** Other programs and clipboard managers can read the clipboard until it is cleared. On Wayland, `wl-copy --sensitive` asks clipboard managers not to keep it; not all honour that.
 - **No reply from the page.** qutewarden can't learn whether a Fill worked, so it says "filling `<name>`" before sending. If the origin check in the page fails (for example, you switched tab or the page navigated), nothing is filled and nothing is reported.
 - **The page sees the filled values.** The fill script runs in its own isolated JavaScript world, so page scripts can't read its variables, but once a value is in a form field the page's own scripts can read it, as with any password manager.
