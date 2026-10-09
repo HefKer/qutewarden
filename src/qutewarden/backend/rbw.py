@@ -25,6 +25,7 @@ import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, fields
 from datetime import UTC, datetime
+from enum import StrEnum
 from pathlib import Path
 from typing import Any, TypeVar
 
@@ -80,11 +81,24 @@ _MATCH_TYPES = {
 }
 
 
+class _ItemType(StrEnum):
+    """The item types qutewarden fills, spelled as rbw's db file and ``rbw list`` spell them."""
+
+    LOGIN = "Login"
+    CARD = "Card"
+    IDENTITY = "Identity"
+
+    @classmethod
+    def of(cls, name: object) -> _ItemType | None:
+        """The member spelled ``name``, or None for any other type."""
+        return next((member for member in cls if member.value == name), None)
+
+
 @dataclass(frozen=True)
 class _DbEntry:
     """The non-secret, unencrypted bits of one Item in rbw's db file."""
 
-    type: str  # rbw's item type: "Login", "Card", "Identity", "SecureNote", "SshKey"
+    type: _ItemType | None  # None for the types qutewarden doesn't fill (SecureNote, SshKey)
     reprompt: bool
     has_totp: bool = False
     match_types: tuple[object, ...] = ()  # one per URI, Login items only
@@ -129,14 +143,11 @@ class RbwBackend(Backend):
     # --- reading ----------------------------------------------------------------
 
     def list_logins(self) -> list[LoginItem]:
-        listed = _parse_json(self._run_checked(["list", "--raw"]).stdout, "rbw list")
-        db = self._read_db()
         logins = []
-        for entry in listed:
-            if entry.get("type") != "Login":
+        for entry, info in self._listed():
+            if entry.get("type") != _ItemType.LOGIN:
                 continue
             uris = [u for u in entry.get("uris") or [] if isinstance(u, str)]
-            info = db.get(entry["id"])
             if info is not None and len(info.match_types) == len(uris):
                 modes = [_match_mode(m) for m in info.match_types]
             else:  # rbw dropped an undecryptable URI: never guess a looser mode
@@ -152,12 +163,9 @@ class RbwBackend(Backend):
         return logins
 
     def list_cards(self) -> list[CardItem]:
-        listed = _parse_json(self._run_checked(["list", "--raw"]).stdout, "rbw list")
-        db = self._read_db()
         cards = []
-        for entry in listed:
-            info = db.get(entry.get("id"))
-            if info is None or info.type != "Card":
+        for entry, info in self._listed():
+            if info is None or info.type is not _ItemType.CARD:
                 continue
             card = CardItem(id=entry["id"], name=entry.get("name") or "", reprompt=info.reprompt)
             if not info.reprompt:  # a Re-prompt item would ask for the master password
@@ -168,25 +176,29 @@ class RbwBackend(Backend):
         return cards
 
     def list_identities(self) -> list[IdentityItem]:
+        return [IdentityItem(id=entry["id"], name=entry.get("name") or "", reprompt=info.reprompt)
+                for entry, info in self._listed()
+                if info is not None and info.type is _ItemType.IDENTITY]
+
+    def _listed(self) -> list[tuple[dict[str, Any], _DbEntry | None]]:
+        """``rbw list --raw``, each entry next to its bits from the db file (None if absent)."""
         listed = _parse_json(self._run_checked(["list", "--raw"]).stdout, "rbw list")
         db = self._read_db()
-        return [IdentityItem(id=entry["id"], name=entry.get("name") or "", reprompt=info.reprompt)
-                for entry in listed
-                if (info := db.get(entry.get("id"))) is not None and info.type == "Identity"]
+        return [(entry, db.get(entry.get("id"))) for entry in listed]
 
     def get_secrets(self, item_id: str) -> ItemSecrets:
         info = self._read_db().get(item_id)
         if info is None:
             raise ItemNotFound("rbw has no item with that id", hint=_SYNC_HINT)
-        if info.type not in ("Login", "Card", "Identity"):
+        if info.type is None:
             raise BackendError("this item type can't be filled")
         item = self._get_raw(item_id)
         data = item.get("data")
         data = data if isinstance(data, dict) else {}
         custom = _custom_fields(item.get("fields"), info.linked_ids, data)
-        if info.type == "Login":
+        if info.type is _ItemType.LOGIN:
             return self._login_secrets(data, custom)
-        if info.type == "Card":
+        if info.type is _ItemType.CARD:
             return _values(CardSecrets, data, custom)
         return _values(IdentitySecrets, data, custom)
 
@@ -325,15 +337,16 @@ class RbwBackend(Backend):
             reprompt = entry.get("master_password_reprompt") not in (None, 0)
             linked_ids = tuple(f.get("linked_id") if isinstance(f, dict) else None
                                for f in entry.get("fields") or [])
-            if item_type == "Login" and isinstance(values, dict):
+            known = _ItemType.of(item_type)
+            if known is _ItemType.LOGIN and isinstance(values, dict):
                 db[entry.get("id")] = _DbEntry(
-                    "Login", reprompt, has_totp=values.get("totp") is not None,
+                    _ItemType.LOGIN, reprompt, has_totp=values.get("totp") is not None,
                     # Old dbs store bare URI strings, which rbw treats as match_type None.
                     match_types=tuple(u.get("match_type") if isinstance(u, dict) else None
                                       for u in values.get("uris") or []),
                     linked_ids=linked_ids)
             else:
-                db[entry.get("id")] = _DbEntry(str(item_type), reprompt, linked_ids=linked_ids)
+                db[entry.get("id")] = _DbEntry(known, reprompt, linked_ids=linked_ids)
         return db
 
 
