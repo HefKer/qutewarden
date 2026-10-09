@@ -448,7 +448,7 @@ class Displays:
     def __init__(self, dirs: Dirs) -> None:
         self._dirs = dirs
         config = dirs.root / "sway.cfg"
-        config.write_text("")
+        config.write_text("xwayland disable\n")  # Xvfb serves X11
         before = set(dirs.runtime.glob("wayland-*"))
         # nixpkgs' sway wrapper starts its own bus with dbus-run-session when
         # there is none, which needs /etc/dbus-1/session.conf: NixOS has it,
@@ -606,7 +606,9 @@ class Qutebrowser:
         argv = ["qutebrowser", "--basedir", str(self.basedir), "--json-logging", "--debug",
                 "--qt-flag", f"host-resolver-rules=MAP * 127.0.0.1:{page_port}",
                 "-s", "auto_save.session", "false", "-s", "session.default_name", "e2e",
-                "-s", "content.notifications.enabled", "false"]
+                "-s", "content.notifications.enabled", "false",
+                # No GPU: Chromium aborts ("GLOzone not found") where no GL exists, as on CI.
+                "-s", "qt.force_software_rendering", "chromium"]
         for key, value in extra_settings:
             argv += ["-s", key, value]
         argv.append("about:blank")
