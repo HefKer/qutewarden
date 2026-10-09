@@ -1,4 +1,4 @@
-"""GLOSSARY.md's _Avoid_ words stay out of the docs and the code.
+"""GLOSSARY.md's _Avoid_ words stay out of the docs, the repo files and the code.
 
 Only the unambiguous ones are checked here; words with an innocent everyday
 use (password, site, match, insert, client, ...) are left to review.
@@ -40,7 +40,9 @@ def _avoid_words() -> set[str]:
 def _scanned_files() -> list[Path]:
     docs = [p for p in (ROOT / "docs").rglob("*.md") if "adr" not in p.parts]
     code = [*(ROOT / "src").rglob("*.py"), *(ROOT / "src").rglob("*.js")]
-    return [ROOT / "README.md", *docs, *code]
+    repo = [ROOT / "README.md", ROOT / "CHANGELOG.md", ROOT / "SECURITY.md"]
+    templates = sorted((ROOT / ".github" / "ISSUE_TEMPLATE").glob("*.yml"))
+    return [*repo, *templates, *docs, *code]
 
 
 def test_banned_words_are_glossary_avoid_words():
