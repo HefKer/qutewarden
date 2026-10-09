@@ -434,23 +434,46 @@ class Page:
 # --- displays -------------------------------------------------------------------------
 
 
+def _tail(path: Path, lines: int = 60) -> str:
+    """The last ``lines`` lines of a log file, for error messages."""
+    try:
+        text = path.read_text(errors="replace")
+    except OSError as e:
+        return f"(unreadable: {e})"
+    return "\n".join(text.splitlines()[-lines:])
+
+
 class Displays:
     """Headless sway (for wl-clipboard) and Xvfb (for xclip)."""
 
     def __init__(self, dirs: Dirs) -> None:
         self._dirs = dirs
         config = dirs.root / "sway.cfg"
-        config.write_text("")
+        config.write_text("xwayland disable\n")  # Xvfb serves X11
         before = set(dirs.runtime.glob("wayland-*"))
-        self._sway = subprocess.Popen(
-            ["sway", "-c", str(config)],
-            env=isolated_environ(dirs, {"WLR_BACKENDS": "headless", "WLR_RENDERER": "pixman",
-                                        "WLR_LIBINPUT_NO_DEVICES": "1"}),
-            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-            start_new_session=True)
-        sock = wait_for(lambda: [p for p in dirs.runtime.glob("wayland-*")
-                                 if p not in before and p.suffix != ".lock" and p.is_socket()],
-                        "sway's Wayland socket")
+        # nixpkgs' sway wrapper starts its own bus with dbus-run-session when
+        # there is none, which needs /etc/dbus-1/session.conf: NixOS has it,
+        # CI runners don't. Headless sway needs no bus, so point it at none.
+        env = {"WLR_BACKENDS": "headless", "WLR_RENDERER": "pixman",
+               "WLR_LIBINPUT_NO_DEVICES": "1",
+               "DBUS_SESSION_BUS_ADDRESS": f"unix:path={dirs.runtime / 'no-bus'}"}
+        log = dirs.root / "sway.log"
+        with log.open("wb") as output:
+            self._sway = subprocess.Popen(
+                ["sway", "-c", str(config)], env=isolated_environ(dirs, env),
+                stdin=subprocess.DEVNULL, stdout=output, stderr=output, start_new_session=True)
+
+        def socket() -> list[Path] | None:
+            if self._sway.poll() is not None:
+                raise HarnessError(f"sway exited with code {self._sway.returncode}")
+            return [p for p in dirs.runtime.glob("wayland-*")
+                    if p not in before and p.suffix != ".lock" and p.is_socket()]
+
+        try:
+            sock = wait_for(socket, "sway's Wayland socket")
+        except HarnessError as e:
+            stop_process(self._sway)
+            raise HarnessError(f"{e}; sway's log:\n{_tail(log)}") from None
         self.wayland_display = sock[0].name
         read, write = os.pipe()
         self._xvfb = subprocess.Popen(
@@ -584,25 +607,35 @@ class Qutebrowser:
         argv = ["qutebrowser", "--basedir", str(self.basedir), "--json-logging", "--debug",
                 "--qt-flag", f"host-resolver-rules=MAP * 127.0.0.1:{page_port}",
                 "-s", "auto_save.session", "false", "-s", "session.default_name", "e2e",
-                "-s", "content.notifications.enabled", "false"]
+                "-s", "content.notifications.enabled", "false",
+                # No GPU: Chromium aborts ("GLOzone not found") where no GL exists, as on CI.
+                "-s", "qt.force_software_rendering", "chromium"]
         for key, value in extra_settings:
             argv += ["-s", key, value]
         argv.append("about:blank")
         self._entries: list[LogEntry] = []
         self._read_pos = 0
         self._partial = b""
+        # The offscreen platform uses GLX when DISPLAY is set (it is, for the
+        # xclip userscripts) and aborts if Xvfb has none, as on CI runners.
+        qt_env = {"QT_QPA_PLATFORM": "offscreen", "QT_QPA_OFFSCREEN_NO_GLX": "1"}
         with open(self.log_path, "wb") as log:
-            self._proc = subprocess.Popen(argv, env={**env, "QT_QPA_PLATFORM": "offscreen"},
+            self._proc = subprocess.Popen(argv, env={**env, **qt_env},
                                           cwd=self.basedir, stdin=subprocess.DEVNULL,
                                           stdout=log, stderr=subprocess.STDOUT,
                                           start_new_session=True)
-        self.socket_path = wait_for(self._ipc_socket, "qutebrowser's IPC socket", 60)
-        wait_for(lambda: any("Init done" in e.message for e in self.log()),
-                 "qutebrowser to finish starting", 60)
+        try:
+            self.socket_path = wait_for(self._ipc_socket, "qutebrowser's IPC socket", 60)
+            wait_for(lambda: self._ipc_socket() and any("Init done" in e.message
+                                                        for e in self.log()),
+                     "qutebrowser to finish starting", 60)
+        except HarnessError as e:
+            stop_process(self._proc)
+            raise HarnessError(f"{e}; qutebrowser's log:\n{_tail(self.log_path)}") from None
 
     def _ipc_socket(self) -> Path | None:
         if self._proc.poll() is not None:
-            raise HarnessError(f"qutebrowser exited; see {self.log_path}")
+            raise HarnessError(f"qutebrowser exited with code {self._proc.returncode}")
         found = [p for p in (self.basedir / "runtime").glob("ipc-*") if p.is_socket()]
         return found[0] if found else None
 
